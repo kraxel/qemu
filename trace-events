@@ -1206,3 +1206,17 @@ xen_pv_mmio_write(uint64_t addr) "WARNING: write to Xen PV Device MMIO space (ad
 # hw/pci/pci_host.c
 pci_cfg_read(const char *dev, unsigned devid, unsigned fnid, unsigned offs, unsigned val) "%s %02u:%u @0x%x -> 0x%x"
 pci_cfg_write(const char *dev, unsigned devid, unsigned fnid, unsigned offs, unsigned val) "%s %02u:%u @0x%x <- 0x%x"
+
+# ui/fbdev.c
+fbdev_enabled(void) ""
+fbdev_cleanup(void) ""
+fbdev_vt_activate(int vtno, int wait) "vtno %d, wait %d"
+fbdev_vt_activated(void) ""
+fbdev_vt_release_request(void) ""
+fbdev_vt_released(void) ""
+fbdev_vt_aquire_request(void) ""
+fbdev_vt_aquired(void) ""
+fbdev_kbd_raw(int enable) "enable %d"
+fbdev_kbd_event(int keycode, const char *kname, int up) "keycode 0x%x [%s], down %d"
+fbdev_dpy_resize(int w, int h) "%dx%d"
+fbdev_dpy_redraw(void)

@@ -315,6 +315,10 @@ void register_vc_handler(VcHandler *handler);
 /* sdl.c */
 void sdl_display_init(DisplayState *ds, int full_screen, int no_frame);
 
+/* fbdev.c */
+int fbdev_display_init(const char *device, bool scale, Error **err);
+void fbdev_display_uninit(void);
+
 /* cocoa.m */
 void cocoa_display_init(DisplayState *ds, int full_screen);
 

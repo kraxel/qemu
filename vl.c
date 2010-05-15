@@ -2280,6 +2280,13 @@ static DisplayType select_display(const char *p)
         fprintf(stderr, "GTK support is disabled\n");
         exit(1);
 #endif
+    } else if (strstart(p, "fbdev", &opts)) {
+#ifdef CONFIG_FBDEV
+        display = DT_FBDEV;
+#else
+        fprintf(stderr, "fbdev support is disabled\n");
+        exit(1);
+#endif
     } else if (strstart(p, "none", &opts)) {
         display = DT_NONE;
     } else {
@@ -4387,6 +4394,20 @@ int main(int argc, char **argv, char **envp)
     case DT_CURSES:
         curses_display_init(ds, full_screen);
         break;
+#endif
+#if defined(CONFIG_FBDEV)
+    case DT_FBDEV:
+    {
+        Error *errp = NULL;
+        if (fbdev_display_init(NULL, false, &errp) != 0) {
+            if (error_is_set(&errp)) {
+                fprintf(stderr, "%s\n", error_get_pretty(errp));
+                error_free(errp);
+            }
+            exit(1);
+        }
+        break;
+    }
 #endif
 #if defined(CONFIG_SDL)
     case DT_SDL:

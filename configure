@@ -224,6 +224,7 @@ netmap="no"
 pixman=""
 sdl=""
 sdlabi="1.2"
+fbdev="no"
 virtfs=""
 vnc="yes"
 sparse="no"
@@ -641,6 +642,7 @@ Haiku)
   kvm="yes"
   vhost_net="yes"
   vhost_scsi="yes"
+  fbdev="yes"
   if [ "$cpu" = "i386" -o "$cpu" = "x86_64" -o "$cpu" = "x32" ] ; then
     audio_possible_drivers="$audio_possible_drivers fmod"
   fi
@@ -798,6 +800,10 @@ for opt do
   --disable-qom-cast-debug) qom_cast_debug="no"
   ;;
   --enable-qom-cast-debug) qom_cast_debug="yes"
+  ;;
+  --disable-fbdev) fbdev="no"
+  ;;
+  --enable-fbdev) fbdev="yes"
   ;;
   --disable-virtfs) virtfs="no"
   ;;
@@ -1219,6 +1225,8 @@ Advanced options (experts only):
   --with-sdlabi            select preferred SDL ABI 1.2 or 2.0
   --disable-gtk            disable gtk UI
   --enable-gtk             enable gtk UI
+  --disable-fbdev          disable linux framebuffer
+  --enable-fbdev           enable linux framebuffer
   --disable-virtfs         disable VirtFS
   --enable-virtfs          enable VirtFS
   --disable-vnc            disable VNC
@@ -4048,6 +4056,7 @@ fi
 echo "pixman            $pixman"
 echo "SDL support       $sdl"
 echo "GTK support       $gtk"
+echo "fbdev support     $fbdev"
 echo "curses support    $curses"
 echo "curl support      $curl"
 echo "mingw32 support   $mingw32"
@@ -4293,6 +4302,9 @@ fi
 if test "$sdl" = "yes" ; then
   echo "CONFIG_SDL=y" >> $config_host_mak
   echo "SDL_CFLAGS=$sdl_cflags" >> $config_host_mak
+fi
+if test "$fbdev" = "yes" ; then
+  echo "CONFIG_FBDEV=y" >> $config_host_mak
 fi
 if test "$cocoa" = "yes" ; then
   echo "CONFIG_COCOA=y" >> $config_host_mak
