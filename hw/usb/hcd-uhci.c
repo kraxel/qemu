@@ -31,6 +31,7 @@
 #include "qemu/timer.h"
 #include "qemu/iov.h"
 #include "sysemu/dma.h"
+#include "sysemu/sysemu.h"
 #include "trace.h"
 #include "qemu/main-loop.h"
 
@@ -154,6 +155,7 @@ struct UHCIState {
     uint32_t fl_base_addr; /* frame list base address */
     uint8_t sof_timing;
     uint8_t status2; /* bit 0 and 1 are used to generate UHCI_STS_USBINT */
+    uint8_t system_wakeup;
     int64_t expire_time;
     QEMUTimer *frame_timer;
     QEMUBH *bh;
@@ -683,6 +685,22 @@ static void uhci_wakeup(USBPort *port1)
     if (port->ctrl & UHCI_PORT_SUSPEND && !(port->ctrl & UHCI_PORT_RD)) {
         port->ctrl |= UHCI_PORT_RD;
         uhci_resume(s);
+    }
+}
+
+static void uhci_wakeup_endpoint(USBBus *bus, USBEndpoint *ep)
+{
+    USBPort *port1 = ep->dev->port;
+    UHCIState *s = port1->opaque;
+
+    if (!(s->system_wakeup & (1 << port1->index))) {
+        return;
+    }
+    if (s->dev.devfn == PCI_DEVFN(1, 2)) {
+        /* piix3/4 chipset uhci controller */
+        qemu_system_wakeup_request(QEMU_WAKEUP_REASON_GPE_b);
+    } else {
+        qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER);
     }
 }
 
@@ -1226,6 +1244,7 @@ static USBPortOps uhci_port_ops = {
 };
 
 static USBBusOps uhci_bus_ops = {
+    .wakeup_endpoint = uhci_wakeup_endpoint,
 };
 
 static int usb_uhci_common_initfn(PCIDevice *dev)
@@ -1277,6 +1296,17 @@ static int usb_uhci_common_initfn(PCIDevice *dev)
     return 0;
 }
 
+static void usb_uhci_intel_write_config(PCIDevice *dev, uint32_t addr,
+                                        uint32_t val, int len)
+{
+    UHCIState *s = DO_UPCAST(UHCIState, dev, dev);
+
+    pci_default_write_config(dev, addr, val, len);
+    if (addr == 0xc4) {
+        s->system_wakeup = val;
+    }
+}
+
 static int usb_uhci_vt82c686b_initfn(PCIDevice *dev)
 {
     UHCIState *s = DO_UPCAST(UHCIState, dev, dev);
@@ -1325,6 +1355,9 @@ static void uhci_class_init(ObjectClass *klass, void *data)
     dc->props = uhci_properties;
     set_bit(DEVICE_CATEGORY_USB, dc->categories);
     u->info = *info;
+    if (k->vendor_id == PCI_VENDOR_ID_INTEL) {
+        k->config_write = usb_uhci_intel_write_config;
+    }
 }
 
 static UHCIInfo uhci_info[] = {
