@@ -1961,14 +1961,32 @@ void qemu_register_suspend_notifier(Notifier *notifier)
     notifier_list_add(&suspend_notifiers, notifier);
 }
 
+static void wakeup_reason_log(const char *func, const char *tag,
+                              WakeupReason reason)
+{
+    static const char *rname[] = {
+        [QEMU_WAKEUP_REASON_OTHER]   = "other",
+        [QEMU_WAKEUP_REASON_RTC]     = "rtc",
+        [QEMU_WAKEUP_REASON_PMTIMER] = "pmtimer",
+        [QEMU_WAKEUP_REASON_GPE_8]   = "gpe 0x08 [kbd]",
+        [QEMU_WAKEUP_REASON_GPE_9]   = "gpe 0x09 [mou]",
+        [QEMU_WAKEUP_REASON_GPE_a]   = "gpe 0x0a [com1]",
+        [QEMU_WAKEUP_REASON_GPE_b]   = "gpe 0x0b [uhci]",
+    };
+    fprintf(stderr, "%s: %s: %s\n", func, tag,
+            (reason < ARRAY_SIZE(rname)) ? rname[reason] : "?");
+}
+
 void qemu_system_wakeup_request(WakeupReason reason)
 {
     if (!runstate_check(RUN_STATE_SUSPENDED)) {
         return;
     }
     if (!(wakeup_reason_mask & (1 << reason))) {
+        wakeup_reason_log(__func__, "blocked", reason);
         return;
     }
+    wakeup_reason_log(__func__, "wakeup", reason);
     runstate_set(RUN_STATE_RUNNING);
     notifier_list_notify(&wakeup_notifiers, &reason);
     wakeup_requested = 1;
@@ -1978,8 +1996,14 @@ void qemu_system_wakeup_request(WakeupReason reason)
 void qemu_system_wakeup_enable(WakeupReason reason, bool enabled)
 {
     if (enabled) {
+        if (!(wakeup_reason_mask & (1 << reason))) {
+            wakeup_reason_log(__func__, "enable", reason);
+        }
         wakeup_reason_mask |= (1 << reason);
     } else {
+        if (wakeup_reason_mask & (1 << reason)) {
+            wakeup_reason_log(__func__, "disable", reason);
+        }
         wakeup_reason_mask &= ~(1 << reason);
     }
 }
