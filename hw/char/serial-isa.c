@@ -67,6 +67,13 @@ static void serial_isa_realizefn(DeviceState *dev, Error **errp)
     }
     index++;
 
+    if (isa->iobase == 0x3f8) {
+        s->reason = QEMU_WAKEUP_REASON_GPE_a;
+        s->wakeup = 1;
+    } else {
+        s->reason = QEMU_WAKEUP_REASON_OTHER;
+    }
+
     s->baudbase = 115200;
     isa_init_irq(isadev, &s->irq, isa->isairq);
     serial_realize_core(s, errp);
