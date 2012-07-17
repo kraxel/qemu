@@ -42,6 +42,10 @@ typedef enum WakeupReason {
     QEMU_WAKEUP_REASON_OTHER = 0,
     QEMU_WAKEUP_REASON_RTC,
     QEMU_WAKEUP_REASON_PMTIMER,
+    QEMU_WAKEUP_REASON_GPE_8,
+    QEMU_WAKEUP_REASON_GPE_9,
+    QEMU_WAKEUP_REASON_GPE_a,
+    QEMU_WAKEUP_REASON_GPE_b,
 } WakeupReason;
 
 void qemu_system_reset_request(void);

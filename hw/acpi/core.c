@@ -323,6 +323,22 @@ static void acpi_notify_wakeup(Notifier *notifier, void *data)
         ar->pm1.evt.sts |=
             (ACPI_BITMASK_WAKE_STATUS | ACPI_BITMASK_TIMER_STATUS);
         break;
+    case QEMU_WAKEUP_REASON_GPE_8:
+        ar->pm1.evt.sts |= ACPI_BITMASK_WAKE_STATUS;
+        ar->gpe.sts[1] |= (1 << 0);
+        break;
+    case QEMU_WAKEUP_REASON_GPE_9:
+        ar->pm1.evt.sts |= ACPI_BITMASK_WAKE_STATUS;
+        ar->gpe.sts[1] |= (1 << 1);
+        break;
+    case QEMU_WAKEUP_REASON_GPE_a:
+        ar->pm1.evt.sts |= ACPI_BITMASK_WAKE_STATUS;
+        ar->gpe.sts[1] |= (1 << 2);
+        break;
+    case QEMU_WAKEUP_REASON_GPE_b:
+        ar->pm1.evt.sts |= ACPI_BITMASK_WAKE_STATUS;
+        ar->gpe.sts[1] |= (1 << 3);
+        break;
     case QEMU_WAKEUP_REASON_OTHER:
     default:
         /* ACPI_BITMASK_WAKE_STATUS should be set on resume.
@@ -576,6 +592,10 @@ void acpi_gpe_reset(ACPIREGS *ar)
 {
     memset(ar->gpe.sts, 0, ar->gpe.len / 2);
     memset(ar->gpe.en, 0, ar->gpe.len / 2);
+    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_8, 0);
+    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_9, 0);
+    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_a, 0);
+    qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_b, 0);
 }
 
 static uint8_t *acpi_gpe_ioport_get_ptr(ACPIREGS *ar, uint32_t addr)
@@ -604,6 +624,12 @@ void acpi_gpe_ioport_writeb(ACPIREGS *ar, uint32_t addr, uint32_t val)
     } else if (addr < ar->gpe.len) {
         /* GPE_EN */
         *cur = val;
+        if (addr == ar->gpe.len / 2 + 1) {
+            qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_8, val & (1 << 0));
+            qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_9, val & (1 << 1));
+            qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_a, val & (1 << 2));
+            qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_GPE_b, val & (1 << 3));
+        }
     } else {
         abort();
     }
