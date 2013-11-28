@@ -50,6 +50,33 @@ qemu_input_find_handler(uint32_t mask)
     return NULL;
 }
 
+static void qemu_input_transform_abs_rotate(InputEvent *evt)
+{
+    switch (graphic_rotate) {
+    case 90:
+        if (evt->abs->axis == INPUT_AXIS_X) {
+            evt->abs->axis = INPUT_AXIS_Y;
+        }
+        if (evt->abs->axis == INPUT_AXIS_Y) {
+            evt->abs->axis = INPUT_AXIS_X;
+            evt->abs->axis = INPUT_EVENT_ABS_SIZE - 1 - evt->abs->axis;
+        }
+        break;
+    case 180:
+        evt->abs->axis = INPUT_EVENT_ABS_SIZE - 1 - evt->abs->axis;
+        break;
+    case 270:
+        if (evt->abs->axis == INPUT_AXIS_X) {
+            evt->abs->axis = INPUT_AXIS_Y;
+            evt->abs->axis = INPUT_EVENT_ABS_SIZE - 1 - evt->abs->axis;
+        }
+        if (evt->abs->axis == INPUT_AXIS_Y) {
+            evt->abs->axis = INPUT_AXIS_X;
+        }
+        break;
+    }
+}
+
 void qemu_input_event_send(QemuConsole *src, InputEvent *evt)
 {
     QemuInputHandlerState *s;
@@ -58,6 +85,12 @@ void qemu_input_event_send(QemuConsole *src, InputEvent *evt)
         return;
     }
 
+    /* pre processing */
+    if (graphic_rotate && (evt->kind == INPUT_EVENT_KIND_ABS)) {
+            qemu_input_transform_abs_rotate(evt);
+    }
+
+    /* send event */
     s = qemu_input_find_handler(1 << evt->kind);
     s->handler->event(s->dev, src, evt);
     s->events++;
