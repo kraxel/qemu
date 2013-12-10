@@ -35,10 +35,9 @@
 #include "ui/console.h"
 #include "ui/input.h"
 #include "sysemu/sysemu.h"
-#include "x_keymap.h"
 #include "sdl_zoom.h"
 
-#include "sdl2_scancode_translate.h"
+#include "sdl2-keymap.h"
 
 static int sdl2_num_outputs;
 static struct sdl2_console_state {
@@ -64,7 +63,7 @@ static int gui_noframe;
 static int gui_key_modifier_pressed;
 static int gui_keysym;
 static int gui_grab_code = KMOD_LALT | KMOD_LCTRL;
-static uint8_t modifiers_state[256];
+static uint8_t modifiers_state[SDL_NUM_SCANCODES];
 static SDL_Cursor *sdl_cursor_normal;
 static SDL_Cursor *sdl_cursor_hidden;
 static int absolute_enabled = 0;
@@ -182,62 +181,13 @@ static void sdl_switch(DisplayChangeListener *dcl,
     }
 }
 
-/* generic keyboard conversion */
-
-#include "sdl_keysym.h"
-
-static kbd_layout_t *kbd_layout = NULL;
-
-static uint8_t sdl_keyevent_to_keycode_generic(const SDL_KeyboardEvent *ev)
-{
-    int keysym;
-    /* workaround for X11+SDL bug with AltGR */
-    keysym = ev->keysym.sym;
-    if (keysym == 0 && ev->keysym.scancode == 113)
-        keysym = SDLK_MODE;
-    /* For Japanese key '\' and '|' */
-    if (keysym == 92 && ev->keysym.scancode == 133) {
-        keysym = 0xa5;
-    }
-    return keysym2scancode(kbd_layout, keysym) & SCANCODE_KEYMASK;
-}
-
-/* specific keyboard conversions from scan codes */
-
-#if defined(_WIN32)
-
-static uint8_t sdl_keyevent_to_keycode(const SDL_KeyboardEvent *ev)
-{
-    int keycode;
-
-    keycode = ev->keysym.scancode;
-    keycode = sdl2_scancode_to_keycode[keycode];
-    return keycode;
-}
-
-#else
-
-static uint8_t sdl_keyevent_to_keycode(const SDL_KeyboardEvent *ev)
-{
-    int keycode;
-
-    keycode = ev->keysym.scancode;
-
-    keycode = sdl2_scancode_to_keycode[keycode];
-    if (keycode >= 89 && keycode < 150) {
-        keycode = translate_evdev_keycode(keycode - 89);
-    }
-    return keycode;
-}
-
-#endif
-
 static void reset_keys(void)
 {
     int i;
     for(i = 0; i < 256; i++) {
         if (modifiers_state[i]) {
-            qemu_input_event_send_key_number(NULL, i, false);
+            int qcode = sdl2_scancode_to_qcode[i];
+            qemu_input_event_send_key_qcode(NULL, qcode, false);
             modifiers_state[i] = 0;
         }
     }
@@ -245,54 +195,32 @@ static void reset_keys(void)
 
 static void sdl_process_key(SDL_KeyboardEvent *ev)
 {
-    int keycode;
+    int qcode = sdl2_scancode_to_qcode[ev->keysym.scancode];
 
-#if 0
-    if (ev->keysym.sym == SDLK_PAUSE) {
-        /* specific case */
-        int v = 0;
-        if (ev->type == SDL_KEYUP)
-            v |= SCANCODE_UP;
-        kbd_put_keycode(0xe1);
-        kbd_put_keycode(0x1d | v);
-        kbd_put_keycode(0x45 | v);
-        return;
-    }
-#endif
-
-    if (kbd_layout) {
-        keycode = sdl_keyevent_to_keycode_generic(ev);
-    } else {
-        keycode = sdl_keyevent_to_keycode(ev);
-    }
-
-    switch(keycode) {
-    case 0x00:
-        /* sent when leaving window: reset the modifiers state */
-        reset_keys();
-        return;
-    case 0x2a:                          /* Left Shift */
-    case 0x36:                          /* Right Shift */
-    case 0x1d:                          /* Left CTRL */
-    case 0x9d:                          /* Right CTRL */
-    case 0x38:                          /* Left ALT */
-    case 0xb8:                         /* Right ALT */
-        if (ev->type == SDL_KEYUP)
-            modifiers_state[keycode] = 0;
-        else
-            modifiers_state[keycode] = 1;
-        break;
-    case 0x45: /* num lock */
-    case 0x3a: /* caps lock */
+    switch (ev->keysym.scancode) {
+    case SDL_SCANCODE_NUMLOCKCLEAR:
+    case SDL_SCANCODE_CAPSLOCK:
         /* SDL does not send the key up event, so we generate it */
-        qemu_input_event_send_key_number(NULL, keycode, true);
-        qemu_input_event_send_key_number(NULL, keycode, false);
+        qemu_input_event_send_key_qcode(NULL, qcode, true);
+        qemu_input_event_send_key_qcode(NULL, qcode, false);
         return;
+    case SDL_SCANCODE_LCTRL:
+    case SDL_SCANCODE_LSHIFT:
+    case SDL_SCANCODE_LALT:
+    case SDL_SCANCODE_LGUI:
+    case SDL_SCANCODE_RCTRL:
+    case SDL_SCANCODE_RSHIFT:
+    case SDL_SCANCODE_RALT:
+    case SDL_SCANCODE_RGUI:
+        if (ev->type == SDL_KEYUP)
+            modifiers_state[ev->keysym.scancode] = 0;
+        else
+            modifiers_state[ev->keysym.scancode] = 1;
+        /* fall though */
+    default:
+        qemu_input_event_send_key_qcode(NULL, qcode,
+                                        ev->type == SDL_KEYDOWN);
     }
-
-    /* now send the key code */
-    qemu_input_event_send_key_number(NULL, keycode,
-                                     ev->type == SDL_KEYDOWN);
 }
 
 static void sdl_update_caption(struct sdl2_console_state *scon)
@@ -503,7 +431,6 @@ static void toggle_full_screen(struct sdl2_console_state *scon)
 static void handle_keydown(SDL_Event *ev)
 {
     int mod_state;
-    int keycode;
     struct sdl2_console_state *scon = get_scon_from_window(ev->key.windowID);
 
     if (alt_grab) {
@@ -517,13 +444,12 @@ static void handle_keydown(SDL_Event *ev)
     gui_key_modifier_pressed = mod_state;
 
     if (gui_key_modifier_pressed) {
-        keycode = sdl_keyevent_to_keycode(&ev->key);
-        switch (keycode) {
-        case 0x21: /* 'f' key on US keyboard */
+        switch (ev->key.keysym.scancode) {
+        case SDL_SCANCODE_F:
             toggle_full_screen(scon);
             gui_keysym = 1;
             break;
-        case 0x16: /* 'u' key on US keyboard */
+        case SDL_SCANCODE_U:
             if (scaling_active) {
                 scaling_active = 0;
                 sdl_switch(&scon->dcl, NULL);
@@ -532,14 +458,15 @@ static void handle_keydown(SDL_Event *ev)
             }
             gui_keysym = 1;
             break;
-        case 0x1b: /* '+' */
-        case 0x35: /* '-' */
+        case SDL_SCANCODE_KP_PLUS:
+        case SDL_SCANCODE_KP_MINUS:
             if (!gui_fullscreen) {
                 int scr_w, scr_h;
                 int width, height;
                 SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
 
-                width = MAX(scr_w + (keycode == 0x1b ? 50 : -50),
+                width = MAX(scr_w + (ev->key.keysym.scancode ==
+                                     SDL_SCANCODE_KP_PLUS ? 50 : -50),
                             160);
                 height = (surface_height(scon->surface) * width) /
                     surface_width(scon->surface);
@@ -800,16 +727,6 @@ void sdl_display_init(DisplayState *ds, int full_screen, int no_frame)
     uint8_t data = 0;
     char *filename;
     int i;
-#if defined(__APPLE__)
-    /* always use generic keymaps */
-    if (!keyboard_layout)
-        keyboard_layout = "en-us";
-#endif
-    if(keyboard_layout) {
-        kbd_layout = init_keyboard_layout(name2keysym, keyboard_layout);
-        if (!kbd_layout)
-            exit(1);
-    }
 
     if (no_frame)
         gui_noframe = 1;
