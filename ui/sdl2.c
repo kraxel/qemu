@@ -329,7 +329,7 @@ static void sdl_hide_cursor(void)
     if (!cursor_hide)
         return;
 
-    if (kbd_mouse_is_absolute()) {
+    if (qemu_input_is_absolute()) {
         SDL_ShowCursor(1);
         SDL_SetCursor(sdl_cursor_hidden);
     } else {
@@ -342,10 +342,10 @@ static void sdl_show_cursor(void)
     if (!cursor_hide)
         return;
 
-    if (!kbd_mouse_is_absolute()) {
+    if (!qemu_input_is_absolute()) {
         SDL_ShowCursor(1);
         if (guest_cursor &&
-            (gui_grab || kbd_mouse_is_absolute() || absolute_enabled))
+            (gui_grab || qemu_input_is_absolute() || absolute_enabled))
             SDL_SetCursor(guest_sprite);
         else
             SDL_SetCursor(sdl_cursor_normal);
@@ -364,7 +364,7 @@ static void sdl_grab_start(struct sdl2_console_state *scon)
     }
     if (guest_cursor) {
         SDL_SetCursor(guest_sprite);
-        if (!kbd_mouse_is_absolute() && !absolute_enabled) {
+        if (!qemu_input_is_absolute() && !absolute_enabled) {
             SDL_WarpMouseInWindow(scon->real_window, guest_x, guest_y);
         }
     } else
@@ -396,7 +396,7 @@ static void absolute_mouse_grab(struct sdl2_console_state *scon)
 
 static void sdl_mouse_mode_change(Notifier *notify, void *data)
 {
-    if (kbd_mouse_is_absolute()) {
+    if (qemu_input_is_absolute()) {
         if (!absolute_enabled) {
             absolute_enabled = 1;
             absolute_mouse_grab(&sdl2_console[0]);
@@ -411,19 +411,23 @@ static void sdl_mouse_mode_change(Notifier *notify, void *data)
 
 static void sdl_send_mouse_event(struct sdl2_console_state *scon, int dx, int dy, int dz, int x, int y, int state)
 {
-    int buttons = 0;
+    static uint32_t bmap[INPUT_BUTTON_MAX] = {
+        [INPUT_BUTTON_LEFT]       = SDL_BUTTON(SDL_BUTTON_LEFT),
+        [INPUT_BUTTON_MIDDLE]     = SDL_BUTTON(SDL_BUTTON_MIDDLE),
+        [INPUT_BUTTON_RIGHT]      = SDL_BUTTON(SDL_BUTTON_RIGHT),
+#if 0
+        [INPUT_BUTTON_WHEEL_UP]   = SDL_BUTTON(SDL_BUTTON_WHEELUP),
+        [INPUT_BUTTON_WHEEL_DOWN] = SDL_BUTTON(SDL_BUTTON_WHEELDOWN),
+#endif
+    };
+    static uint32_t prev_state;
 
-    if (state & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-        buttons |= MOUSE_EVENT_LBUTTON;
-    }
-    if (state & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
-        buttons |= MOUSE_EVENT_RBUTTON;
-    }
-    if (state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) {
-        buttons |= MOUSE_EVENT_MBUTTON;
+    if (prev_state != state) {
+        qemu_input_update_buttons(scon->dcl.con, bmap, prev_state, state);
+        prev_state = state;
     }
 
-    if (kbd_mouse_is_absolute()) {
+    if (qemu_input_is_absolute()) {
         int scr_w, scr_h;
         int max_w = 0, max_h = 0;
         int off_x = 0, off_y = 0;
@@ -446,19 +450,17 @@ static void sdl_send_mouse_event(struct sdl2_console_state *scon, int dx, int dy
                 }
             }
         }
-
-        dx = (off_x + x) * 0x7FFF / (max_w - 1);
-        dy = (off_y + y) * 0x7FFF / (max_h - 1);
+        qemu_input_queue_abs(scon->dcl.con, INPUT_AXIS_X, off_x + x, max_w);
+        qemu_input_queue_abs(scon->dcl.con, INPUT_AXIS_Y, off_y + y, max_h);
     } else if (guest_cursor) {
         x -= guest_x;
         y -= guest_y;
         guest_x += x;
         guest_y += y;
-        dx = x;
-        dy = y;
+        qemu_input_queue_rel(scon->dcl.con, INPUT_AXIS_X, x);
+        qemu_input_queue_rel(scon->dcl.con, INPUT_AXIS_Y, y);
     }
-
-    kbd_mouse_event(dx, dy, dz, buttons);
+    qemu_input_event_sync();
 }
 
 static void sdl_scale(struct sdl2_console_state *scon, int width, int height)
@@ -592,7 +594,7 @@ static void handle_mousemotion(SDL_Event *ev)
     int max_x, max_y;
     struct sdl2_console_state *scon = get_scon_from_window(ev->key.windowID);
 
-    if (kbd_mouse_is_absolute() || absolute_enabled) {
+    if (qemu_input_is_absolute() || absolute_enabled) {
         int scr_w, scr_h;
         SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
         max_x = scr_w - 1;
@@ -607,7 +609,7 @@ static void handle_mousemotion(SDL_Event *ev)
             sdl_grab_start(scon);
         }
     }
-    if (gui_grab || kbd_mouse_is_absolute() || absolute_enabled) {
+    if (gui_grab || qemu_input_is_absolute() || absolute_enabled) {
         sdl_send_mouse_event(scon, ev->motion.xrel, ev->motion.yrel, 0,
                              ev->motion.x, ev->motion.y, ev->motion.state);
     }
@@ -621,7 +623,7 @@ static void handle_mousebutton(SDL_Event *ev)
     int dz;
 
     bev = &ev->button;
-    if (!gui_grab && !kbd_mouse_is_absolute()) {
+    if (!gui_grab && !qemu_input_is_absolute()) {
         if (ev->type == SDL_MOUSEBUTTONUP && bev->button == SDL_BUTTON_LEFT) {
             /* start grabbing all events */
             sdl_grab_start(scon);
@@ -663,7 +665,7 @@ static void handle_windowevent(DisplayChangeListener *dcl, SDL_Event *ev)
         break;
     case SDL_WINDOWEVENT_FOCUS_GAINED:
     case SDL_WINDOWEVENT_ENTER:
-        if (!gui_grab && (kbd_mouse_is_absolute() || absolute_enabled)) {
+        if (!gui_grab && (qemu_input_is_absolute() || absolute_enabled)) {
             absolute_mouse_grab(scon);
         }
         break;
@@ -735,9 +737,9 @@ static void sdl_mouse_warp(DisplayChangeListener *dcl,
     if (on) {
         if (!guest_cursor)
             sdl_show_cursor();
-        if (gui_grab || kbd_mouse_is_absolute() || absolute_enabled) {
+        if (gui_grab || qemu_input_is_absolute() || absolute_enabled) {
             SDL_SetCursor(guest_sprite);
-            if (!kbd_mouse_is_absolute() && !absolute_enabled) {
+            if (!qemu_input_is_absolute() && !absolute_enabled) {
                 SDL_WarpMouseInWindow(scon->real_window, x, y);
             }
         }
@@ -772,7 +774,7 @@ static void sdl_mouse_define(DisplayChangeListener *dcl,
         return;
     }
     if (guest_cursor &&
-        (gui_grab || kbd_mouse_is_absolute() || absolute_enabled))
+        (gui_grab || qemu_input_is_absolute() || absolute_enabled))
         SDL_SetCursor(guest_sprite);
 }
 
