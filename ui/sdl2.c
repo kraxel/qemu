@@ -345,7 +345,7 @@ static void sdl_show_cursor(void)
     if (!cursor_hide)
         return;
 
-    if (!kbd_mouse_is_absolute() || !qemu_console_is_graphic(NULL)) {
+    if (!kbd_mouse_is_absolute()) {
         SDL_ShowCursor(1);
         if (guest_cursor &&
             (gui_grab || kbd_mouse_is_absolute() || absolute_enabled))
@@ -402,9 +402,7 @@ static void sdl_mouse_mode_change(Notifier *notify, void *data)
     if (kbd_mouse_is_absolute()) {
         if (!absolute_enabled) {
             absolute_enabled = 1;
-            if (qemu_console_is_graphic(NULL)) {
-                absolute_mouse_grab(&sdl2_console[0]);
-            }
+            absolute_mouse_grab(&sdl2_console[0]);
         }
     } else if (absolute_enabled) {
         if (!gui_fullscreen) {
@@ -495,7 +493,7 @@ static void toggle_full_screen(struct sdl2_console_state *scon)
         } else {
             do_sdl_resize(scon, width, height, 0);
         }
-        if (!gui_saved_grab || !qemu_console_is_graphic(NULL)) {
+        if (!gui_saved_grab) {
             sdl_grab_end(scon);
         }
     }
@@ -535,26 +533,6 @@ static void handle_keydown(SDL_Event *ev)
             }
             gui_keysym = 1;
             break;
-        case 0x02 ... 0x0a: /* '1' to '9' keys */
-            /* Reset the modifiers sent to the current console */
-            reset_keys();
-            console_select(keycode - 0x02);
-            gui_keysym = 1;
-            if (gui_fullscreen) {
-                break;
-            }
-            if (!qemu_console_is_graphic(NULL)) {
-                /* release grab if going to a text console */
-                if (gui_grab) {
-                    sdl_grab_end(scon);
-                } else if (absolute_enabled) {
-                    sdl_show_cursor();
-                }
-            } else if (absolute_enabled) {
-                sdl_hide_cursor();
-                absolute_mouse_grab(scon);
-            }
-            break;
         case 0x1b: /* '+' */
         case 0x35: /* '-' */
             if (!gui_fullscreen) {
@@ -575,79 +553,8 @@ static void handle_keydown(SDL_Event *ev)
         default:
             break;
         }
-    } else if (!qemu_console_is_graphic(NULL)) {
-        int keysym = ev->key.keysym.sym;
-
-        if (ev->key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)) {
-            switch (ev->key.keysym.sym) {
-            case SDLK_UP:
-                keysym = QEMU_KEY_CTRL_UP;
-                break;
-            case SDLK_DOWN:
-                keysym = QEMU_KEY_CTRL_DOWN;
-                break;
-            case SDLK_LEFT:
-                keysym = QEMU_KEY_CTRL_LEFT;
-                break;
-            case SDLK_RIGHT:
-                keysym = QEMU_KEY_CTRL_RIGHT;
-                break;
-            case SDLK_HOME:
-                keysym = QEMU_KEY_CTRL_HOME;
-                break;
-            case SDLK_END:
-                keysym = QEMU_KEY_CTRL_END;
-                break;
-            case SDLK_PAGEUP:
-                keysym = QEMU_KEY_CTRL_PAGEUP;
-                break;
-            case SDLK_PAGEDOWN:
-                keysym = QEMU_KEY_CTRL_PAGEDOWN;
-                break;
-            default:
-                break;
-            }
-        } else {
-            switch (ev->key.keysym.sym) {
-            case SDLK_UP:
-                keysym = QEMU_KEY_UP;
-                break;
-            case SDLK_DOWN:
-                keysym = QEMU_KEY_DOWN;
-                break;
-            case SDLK_LEFT:
-                keysym = QEMU_KEY_LEFT;
-                break;
-            case SDLK_RIGHT:
-                keysym = QEMU_KEY_RIGHT;
-                break;
-            case SDLK_HOME:
-                keysym = QEMU_KEY_HOME;
-                break;
-            case SDLK_END:
-                keysym = QEMU_KEY_END;
-                break;
-            case SDLK_PAGEUP:
-                keysym = QEMU_KEY_PAGEUP;
-                break;
-            case SDLK_PAGEDOWN:
-                keysym = QEMU_KEY_PAGEDOWN;
-                break;
-            case SDLK_BACKSPACE:
-                keysym = QEMU_KEY_BACKSPACE;
-                break;
-            case SDLK_DELETE:
-                keysym = QEMU_KEY_DELETE;
-                break;
-            default:
-                break;
-            }
-        }
-        if (keysym) {
-            kbd_put_keysym(keysym);
-        }
     }
-    if (qemu_console_is_graphic(NULL) && !gui_keysym) {
+    if (!gui_keysym) {
         sdl_process_key(&ev->key);
     }
 }
@@ -667,9 +574,7 @@ static void handle_keyup(SDL_Event *ev)
         if (gui_keysym == 0) {
             /* exit/enter grab if pressing Ctrl-Alt */
             if (!gui_grab) {
-                if (qemu_console_is_graphic(NULL)) {
-                    sdl_grab_start(scon);
-                }
+                sdl_grab_start(scon);
             } else if (!gui_fullscreen) {
                 sdl_grab_end(scon);
             }
@@ -680,7 +585,7 @@ static void handle_keyup(SDL_Event *ev)
         }
         gui_keysym = 0;
     }
-    if (qemu_console_is_graphic(NULL) && !gui_keysym) {
+    if (!gui_keysym) {
         sdl_process_key(&ev->key);
     }
 }
@@ -690,8 +595,7 @@ static void handle_mousemotion(SDL_Event *ev)
     int max_x, max_y;
     struct sdl2_console_state *scon = get_scon_from_window(ev->key.windowID);
 
-    if (qemu_console_is_graphic(NULL) &&
-        (kbd_mouse_is_absolute() || absolute_enabled)) {
+    if (kbd_mouse_is_absolute() || absolute_enabled) {
         int scr_w, scr_h;
         SDL_GetWindowSize(scon->real_window, &scr_w, &scr_h);
         max_x = scr_w - 1;
@@ -718,10 +622,6 @@ static void handle_mousebutton(SDL_Event *ev)
     SDL_MouseButtonEvent *bev;
     struct sdl2_console_state *scon = get_scon_from_window(ev->key.windowID);
     int dz;
-
-    if (!qemu_console_is_graphic(NULL)) {
-        return;
-    }
 
     bev = &ev->button;
     if (!gui_grab && !kbd_mouse_is_absolute()) {
@@ -766,8 +666,7 @@ static void handle_windowevent(DisplayChangeListener *dcl, SDL_Event *ev)
         break;
     case SDL_WINDOWEVENT_FOCUS_GAINED:
     case SDL_WINDOWEVENT_ENTER:
-        if (!gui_grab && qemu_console_is_graphic(NULL) &&
-            (kbd_mouse_is_absolute() || absolute_enabled)) {
+        if (!gui_grab && (kbd_mouse_is_absolute() || absolute_enabled)) {
             absolute_mouse_grab(scon);
         }
         break;
