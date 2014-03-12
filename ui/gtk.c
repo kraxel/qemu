@@ -1297,7 +1297,7 @@ static GtkWidget *gd_create_menu_machine(GtkDisplayState *s, GtkAccelGroup *acce
     gtk_menu_item_set_accel_path(GTK_MENU_ITEM(s->quit_item),
                                  "<QEMU>/Machine/Quit");
     gtk_accel_map_add_entry("<QEMU>/Machine/Quit",
-                            GDK_KEY_q, GDK_CONTROL_MASK);
+                            GDK_KEY_q, HOTKEY_MODIFIERS);
     gtk_menu_shell_append(GTK_MENU_SHELL(machine_menu), s->quit_item);
 
     return machine_menu;
