@@ -1906,6 +1906,13 @@ static Property virtio_input_hid_pci_properties[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
+static Property virtio_input_host_pci_properties[] = {
+    DEFINE_VIRTIO_INPUT_PROPERTIES(VirtIOInputPCI, vdev.input),
+    DEFINE_PROP_STRING("evdev", VirtIOInputHostPCI, vdev.evdev),
+    DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
 static void virtio_input_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
 {
     VirtIOInputPCI *vinput = VIRTIO_INPUT_PCI(vpci_dev);
@@ -1952,6 +1959,13 @@ static void virtio_input_hid_mouse_pci_class_init(ObjectClass *klass,
     pcidev_k->class_id = PCI_CLASS_INPUT_MOUSE;
 }
 
+static void virtio_input_host_pci_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+
+    dc->props = virtio_input_host_pci_properties;
+}
+
 static void virtio_keyboard_initfn(Object *obj)
 {
     VirtIOInputHIDPCI *dev = VIRTIO_INPUT_HID_PCI(obj);
@@ -1970,6 +1984,13 @@ static void virtio_tablet_initfn(Object *obj)
 {
     VirtIOInputHIDPCI *dev = VIRTIO_INPUT_HID_PCI(obj);
     object_initialize(&dev->vdev, sizeof(dev->vdev), TYPE_VIRTIO_TABLET);
+    object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
+}
+
+static void virtio_host_initfn(Object *obj)
+{
+    VirtIOInputHostPCI *dev = VIRTIO_INPUT_HOST_PCI(obj);
+    object_initialize(&dev->vdev, sizeof(dev->vdev), TYPE_VIRTIO_INPUT_HOST);
     object_property_add_child(obj, "virtio-backend", OBJECT(&dev->vdev), NULL);
 }
 
@@ -2010,6 +2031,14 @@ static const TypeInfo virtio_tablet_pci_info = {
     .parent        = TYPE_VIRTIO_INPUT_HID_PCI,
     .instance_size = sizeof(VirtIOInputHIDPCI),
     .instance_init = virtio_tablet_initfn,
+};
+
+static const TypeInfo virtio_host_pci_info = {
+    .name          = TYPE_VIRTIO_INPUT_HOST_PCI,
+    .parent        = TYPE_VIRTIO_INPUT_PCI,
+    .instance_size = sizeof(VirtIOInputHostPCI),
+    .instance_init = virtio_host_initfn,
+    .class_init    = virtio_input_host_pci_class_init,
 };
 
 /* virtio-pci-bus */
@@ -2058,6 +2087,7 @@ static void virtio_pci_register_types(void)
     type_register_static(&virtio_keyboard_pci_info);
     type_register_static(&virtio_mouse_pci_info);
     type_register_static(&virtio_tablet_pci_info);
+    type_register_static(&virtio_host_pci_info);
     type_register_static(&virtio_pci_bus_info);
     type_register_static(&virtio_pci_info);
 #ifdef CONFIG_VIRTFS

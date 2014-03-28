@@ -50,6 +50,12 @@ typedef struct virtio_input_event virtio_input_event;
 #define VIRTIO_INPUT_HID_GET_PARENT_CLASS(obj) \
         OBJECT_GET_PARENT_CLASS(obj, TYPE_VIRTIO_INPUT_HID)
 
+#define TYPE_VIRTIO_INPUT_HOST   "virtio-input-host-device"
+#define VIRTIO_INPUT_HOST(obj) \
+        OBJECT_CHECK(VirtIOInputHost, (obj), TYPE_VIRTIO_INPUT_HOST)
+#define VIRTIO_INPUT_HOST_GET_PARENT_CLASS(obj) \
+        OBJECT_GET_PARENT_CLASS(obj, TYPE_VIRTIO_INPUT_HOST)
+
 #define DEFINE_VIRTIO_INPUT_PROPERTIES(_state, _field)       \
         DEFINE_PROP_STRING("serial", _state, _field.serial)
 
@@ -57,6 +63,7 @@ typedef struct VirtIOInput VirtIOInput;
 typedef struct VirtIOInputClass VirtIOInputClass;
 typedef struct VirtIOInputConfig VirtIOInputConfig;
 typedef struct VirtIOInputHID VirtIOInputHID;
+typedef struct VirtIOInputHost VirtIOInputHost;
 
 struct virtio_input_conf {
     char *serial;
@@ -98,6 +105,12 @@ struct VirtIOInputHID {
     QemuInputHandler                  *handler;
     QemuInputHandlerState             *hs;
     int                               ledstate;
+};
+
+struct VirtIOInputHost {
+    VirtIOInput                       parent_obj;
+    char                              *evdev;
+    int                               fd;
 };
 
 void virtio_input_send(VirtIOInput *vinput, virtio_input_event *event);
