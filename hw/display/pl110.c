@@ -112,15 +112,6 @@ static const unsigned char *idregs[] = {
     pl111_id
 };
 
-#define BITS 8
-#include "pl110_template.h"
-#define BITS 15
-#include "pl110_template.h"
-#define BITS 16
-#include "pl110_template.h"
-#define BITS 24
-#include "pl110_template.h"
-#define BITS 32
 #include "pl110_template.h"
 
 static int pl110_enabled(PL110State *s)
@@ -133,7 +124,6 @@ static void pl110_update_display(void *opaque)
     PL110State *s = (PL110State *)opaque;
     SysBusDevice *sbd;
     DisplaySurface *surface = qemu_console_surface(s->con);
-    drawfn* fntable;
     drawfn fn;
     int dest_width;
     int src_width;
@@ -147,33 +137,6 @@ static void pl110_update_display(void *opaque)
 
     sbd = SYS_BUS_DEVICE(s);
 
-    switch (surface_bits_per_pixel(surface)) {
-    case 0:
-        return;
-    case 8:
-        fntable = pl110_draw_fn_8;
-        dest_width = 1;
-        break;
-    case 15:
-        fntable = pl110_draw_fn_15;
-        dest_width = 2;
-        break;
-    case 16:
-        fntable = pl110_draw_fn_16;
-        dest_width = 2;
-        break;
-    case 24:
-        fntable = pl110_draw_fn_24;
-        dest_width = 3;
-        break;
-    case 32:
-        fntable = pl110_draw_fn_32;
-        dest_width = 4;
-        break;
-    default:
-        fprintf(stderr, "pl110: Bad color depth\n");
-        exit(1);
-    }
     if (s->cr & PL110_CR_BGR)
         bpp_offset = 0;
     else
@@ -208,11 +171,11 @@ static void pl110_update_display(void *opaque)
     }
 
     if (s->cr & PL110_CR_BEBO)
-        fn = fntable[s->bpp + 8 + bpp_offset];
+        fn = pl110_draw_fn[s->bpp + 8 + bpp_offset];
     else if (s->cr & PL110_CR_BEPO)
-        fn = fntable[s->bpp + 16 + bpp_offset];
+        fn = pl110_draw_fn[s->bpp + 16 + bpp_offset];
     else
-        fn = fntable[s->bpp + bpp_offset];
+        fn = pl110_draw_fn[s->bpp + bpp_offset];
 
     src_width = s->cols;
     switch (s->bpp) {
@@ -236,7 +199,9 @@ static void pl110_update_display(void *opaque)
         src_width <<= 2;
         break;
     }
-    dest_width *= s->cols;
+
+    g_assert(surface_bits_per_pixel(surface) == 32);
+    dest_width = 4 * s->cols;
     first = 0;
     framebuffer_update_display(surface, sysbus_address_space(sbd),
                                s->upbase, s->cols, s->rows,
@@ -277,19 +242,11 @@ static void pl110_update_palette(PL110State *s, int n)
         /* The I bit is ignored.  */
         raw >>= 6;
         switch (surface_bits_per_pixel(surface)) {
-        case 8:
-            s->palette[n] = rgb_to_pixel8(r, g, b);
-            break;
-        case 15:
-            s->palette[n] = rgb_to_pixel15(r, g, b);
-            break;
-        case 16:
-            s->palette[n] = rgb_to_pixel16(r, g, b);
-            break;
-        case 24:
         case 32:
             s->palette[n] = rgb_to_pixel32(r, g, b);
             break;
+        default:
+            g_assert_not_reached();
         }
         n++;
     }
