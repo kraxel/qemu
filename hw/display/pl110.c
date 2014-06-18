@@ -170,12 +170,13 @@ static void pl110_update_display(void *opaque)
         }
     }
 
-    if (s->cr & PL110_CR_BEBO)
-        fn = pl110_draw_fn[s->bpp + 8 + bpp_offset];
-    else if (s->cr & PL110_CR_BEPO)
-        fn = pl110_draw_fn[s->bpp + 16 + bpp_offset];
-    else
-        fn = pl110_draw_fn[s->bpp + bpp_offset];
+    if (s->cr & PL110_CR_BEBO) {
+        bpp_offset += 8 + s->bpp;
+    } else if (s->cr & PL110_CR_BEPO) {
+        bpp_offset += 16 + s->bpp;
+    } else {
+        bpp_offset += s->bpp;
+    }
 
     src_width = s->cols;
     switch (s->bpp) {
@@ -201,23 +202,39 @@ static void pl110_update_display(void *opaque)
     }
 
     /* handle resize */
-    if (surface_width(surface) != s->cols ||
+    if (s->invalidate ||
+        surface_width(surface) != s->cols ||
         surface_height(surface) != s->rows) {
-        qemu_console_resize(s->con, s->cols, s->rows);
-        surface = qemu_console_surface(s->con);
+        if (pl110_draw[bpp_offset].fmt) {
+            surface = qemu_create_displaysurface_guestmem
+                (s->cols, s->rows, pl110_draw[bpp_offset].fmt, 0, s->upbase);
+            dpy_gfx_replace_surface(s->con, surface);
+        } else {
+            qemu_console_resize(s->con, s->cols, s->rows);
+            surface = qemu_console_surface(s->con);
+        }
+        fprintf(stderr, "%s: %s memory, %dx%d, bpp_offset %d, format 0x%x\n",
+                __func__, is_buffer_shared(surface) ? "guest" : "host",
+                s->cols, s->rows, bpp_offset, surface->format);
     }
 
-    g_assert(surface_bits_per_pixel(surface) == 32);
-    dest_width = 4 * s->cols;
-    first = 0;
-    framebuffer_update_display(surface, sysbus_address_space(sbd),
-                               s->upbase, s->cols, s->rows,
-                               src_width, dest_width, 0,
-                               s->invalidate,
-                               fn, s->palette,
-                               &first, &last);
-    if (first >= 0) {
-        dpy_gfx_update(s->con, 0, first, s->cols, last - first + 1);
+    if (is_buffer_shared(surface)) {
+        dpy_gfx_update_dirty(s->con, sysbus_address_space(sbd),
+                             s->upbase, s->invalidate);
+    } else {
+        g_assert(surface_bits_per_pixel(surface) == 32);
+        dest_width = 4 * s->cols;
+        first = 0;
+        fn = pl110_draw[bpp_offset].fn;
+        framebuffer_update_display(surface, sysbus_address_space(sbd),
+                                   s->upbase, s->cols, s->rows,
+                                   src_width, dest_width, 0,
+                                   s->invalidate,
+                                   fn, s->palette,
+                                   &first, &last);
+        if (first >= 0) {
+            dpy_gfx_update(s->con, 0, first, s->cols, last - first + 1);
+        }
     }
     s->invalidate = 0;
 }
@@ -235,6 +252,8 @@ static void pl110_update_palette(PL110State *s, int n)
     uint32_t raw;
     unsigned int r, g, b;
 
+    g_assert(is_buffer_shared(surface) ||
+             surface_bits_per_pixel(surface) == 32);
     raw = s->raw_palette[n];
     n <<= 1;
     for (i = 0; i < 2; i++) {
@@ -245,13 +264,7 @@ static void pl110_update_palette(PL110State *s, int n)
         b = (raw & 0x1f) << 3;
         /* The I bit is ignored.  */
         raw >>= 6;
-        switch (surface_bits_per_pixel(surface)) {
-        case 32:
-            s->palette[n] = rgb_to_pixel32(r, g, b);
-            break;
-        default:
-            g_assert_not_reached();
-        }
+        s->palette[n] = rgb_to_pixel32(r, g, b);
         n++;
     }
 }

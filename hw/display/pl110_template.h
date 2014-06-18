@@ -32,61 +32,72 @@
 #include "pl110_template.h"
 #undef BORDER
 
-static drawfn pl110_draw_fn[48] =
-{
-    pl110_draw_line1_lblp_bgr,
-    pl110_draw_line2_lblp_bgr,
-    pl110_draw_line4_lblp_bgr,
-    pl110_draw_line8_lblp_bgr,
-    pl110_draw_line16_555_lblp_bgr,
-    pl110_draw_line32_lblp_bgr,
-    pl110_draw_line16_lblp_bgr,
-    pl110_draw_line12_lblp_bgr,
+#ifdef HOST_WORDS_BIGENDIAN
+# define LEBE(le, be) (be)
+#else
+# define LEBE(le, be) (le)
+#endif
 
-    pl110_draw_line1_bbbp_bgr,
-    pl110_draw_line2_bbbp_bgr,
-    pl110_draw_line4_bbbp_bgr,
-    pl110_draw_line8_bbbp_bgr,
-    pl110_draw_line16_555_bbbp_bgr,
-    pl110_draw_line32_bbbp_bgr,
-    pl110_draw_line16_bbbp_bgr,
-    pl110_draw_line12_bbbp_bgr,
+static struct {
+    drawfn fn;
+    pixman_format_code_t fmt;
+} pl110_draw[48] = {
+    { .fn = pl110_draw_line1_lblp_bgr },
+    { .fn = pl110_draw_line2_lblp_bgr },
+    { .fn = pl110_draw_line4_lblp_bgr },
+    { .fn = pl110_draw_line8_lblp_bgr },
+    { .fn = pl110_draw_line16_555_lblp_bgr, .fmt = LEBE(PIXMAN_x1r5g5b5, 0) },
+    { .fn = pl110_draw_line32_lblp_bgr,     .fmt = LEBE(PIXMAN_x8r8g8b8,
+                                                        PIXMAN_b8g8r8a8)    },
+    { .fn = pl110_draw_line16_lblp_bgr,     .fmt = LEBE(PIXMAN_r5g6b5,   0) },
+    { .fn = pl110_draw_line12_lblp_bgr,     .fmt = LEBE(PIXMAN_x4r4g4b4, 0) },
 
-    pl110_draw_line1_lbbp_bgr,
-    pl110_draw_line2_lbbp_bgr,
-    pl110_draw_line4_lbbp_bgr,
-    pl110_draw_line8_lbbp_bgr,
-    pl110_draw_line16_555_lbbp_bgr,
-    pl110_draw_line32_lbbp_bgr,
-    pl110_draw_line16_lbbp_bgr,
-    pl110_draw_line12_lbbp_bgr,
+    { .fn = pl110_draw_line1_bbbp_bgr },
+    { .fn = pl110_draw_line2_bbbp_bgr },
+    { .fn = pl110_draw_line4_bbbp_bgr },
+    { .fn = pl110_draw_line8_bbbp_bgr },
+    { .fn = pl110_draw_line16_555_bbbp_bgr },
+    { .fn = pl110_draw_line32_bbbp_bgr,     .fmt = LEBE(PIXMAN_b8g8r8a8,
+                                                        PIXMAN_x8r8g8b8)    },
+    { .fn = pl110_draw_line16_bbbp_bgr },
+    { .fn = pl110_draw_line12_bbbp_bgr },
 
-    pl110_draw_line1_lblp_rgb,
-    pl110_draw_line2_lblp_rgb,
-    pl110_draw_line4_lblp_rgb,
-    pl110_draw_line8_lblp_rgb,
-    pl110_draw_line16_555_lblp_rgb,
-    pl110_draw_line32_lblp_rgb,
-    pl110_draw_line16_lblp_rgb,
-    pl110_draw_line12_lblp_rgb,
+    { .fn = pl110_draw_line1_lbbp_bgr },
+    { .fn = pl110_draw_line2_lbbp_bgr },
+    { .fn = pl110_draw_line4_lbbp_bgr },
+    { .fn = pl110_draw_line8_lbbp_bgr },
+    { .fn = pl110_draw_line16_555_lbbp_bgr, .fmt = LEBE(PIXMAN_x1r5g5b5, 0) },
+    { .fn = pl110_draw_line32_lbbp_bgr,     .fmt = LEBE(PIXMAN_x8r8g8b8,
+                                                        PIXMAN_b8g8r8a8)    },
+    { .fn = pl110_draw_line16_lbbp_bgr,     .fmt = LEBE(PIXMAN_r5g6b5,   0) },
+    { .fn = pl110_draw_line12_lbbp_bgr,     .fmt = LEBE(PIXMAN_x4r4g4b4, 0) },
 
-    pl110_draw_line1_bbbp_rgb,
-    pl110_draw_line2_bbbp_rgb,
-    pl110_draw_line4_bbbp_rgb,
-    pl110_draw_line8_bbbp_rgb,
-    pl110_draw_line16_555_bbbp_rgb,
-    pl110_draw_line32_bbbp_rgb,
-    pl110_draw_line16_bbbp_rgb,
-    pl110_draw_line12_bbbp_rgb,
+    { .fn = pl110_draw_line1_lblp_rgb },
+    { .fn = pl110_draw_line2_lblp_rgb },
+    { .fn = pl110_draw_line4_lblp_rgb },
+    { .fn = pl110_draw_line8_lblp_rgb },
+    { .fn = pl110_draw_line16_555_lblp_rgb },
+    { .fn = pl110_draw_line32_lblp_rgb },
+    { .fn = pl110_draw_line16_lblp_rgb },
+    { .fn = pl110_draw_line12_lblp_rgb },
 
-    pl110_draw_line1_lbbp_rgb,
-    pl110_draw_line2_lbbp_rgb,
-    pl110_draw_line4_lbbp_rgb,
-    pl110_draw_line8_lbbp_rgb,
-    pl110_draw_line16_555_lbbp_rgb,
-    pl110_draw_line32_lbbp_rgb,
-    pl110_draw_line16_lbbp_rgb,
-    pl110_draw_line12_lbbp_rgb,
+    { .fn = pl110_draw_line1_bbbp_rgb },
+    { .fn = pl110_draw_line2_bbbp_rgb },
+    { .fn = pl110_draw_line4_bbbp_rgb },
+    { .fn = pl110_draw_line8_bbbp_rgb },
+    { .fn = pl110_draw_line16_555_bbbp_rgb },
+    { .fn = pl110_draw_line32_bbbp_rgb },
+    { .fn = pl110_draw_line16_bbbp_rgb },
+    { .fn = pl110_draw_line12_bbbp_rgb },
+
+    { .fn = pl110_draw_line1_lbbp_rgb },
+    { .fn = pl110_draw_line2_lbbp_rgb },
+    { .fn = pl110_draw_line4_lbbp_rgb },
+    { .fn = pl110_draw_line8_lbbp_rgb },
+    { .fn = pl110_draw_line16_555_lbbp_rgb },
+    { .fn = pl110_draw_line32_lbbp_rgb },
+    { .fn = pl110_draw_line16_lbbp_rgb },
+    { .fn = pl110_draw_line12_lbbp_rgb },
 };
 
 #undef BITS
