@@ -200,6 +200,13 @@ static void pl110_update_display(void *opaque)
         break;
     }
 
+    /* handle resize */
+    if (surface_width(surface) != s->cols ||
+        surface_height(surface) != s->rows) {
+        qemu_console_resize(s->con, s->cols, s->rows);
+        surface = qemu_console_surface(s->con);
+    }
+
     g_assert(surface_bits_per_pixel(surface) == 32);
     dest_width = 4 * s->cols;
     first = 0;
@@ -219,9 +226,6 @@ static void pl110_invalidate_display(void * opaque)
 {
     PL110State *s = (PL110State *)opaque;
     s->invalidate = 1;
-    if (pl110_enabled(s)) {
-        qemu_console_resize(s->con, s->cols, s->rows);
-    }
 }
 
 static void pl110_update_palette(PL110State *s, int n)
@@ -254,11 +258,6 @@ static void pl110_update_palette(PL110State *s, int n)
 
 static void pl110_resize(PL110State *s, int width, int height)
 {
-    if (width != s->cols || height != s->rows) {
-        if (pl110_enabled(s)) {
-            qemu_console_resize(s->con, width, height);
-        }
-    }
     s->cols = width;
     s->rows = height;
 }
@@ -373,9 +372,6 @@ static void pl110_write(void *opaque, hwaddr offset,
     control:
         s->cr = val;
         s->bpp = (val >> 1) & 7;
-        if (pl110_enabled(s)) {
-            qemu_console_resize(s->con, s->cols, s->rows);
-        }
         break;
     case 10: /* LCDICR */
         s->int_status &= ~val;
