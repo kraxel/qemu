@@ -115,3 +115,132 @@ void framebuffer_update_display(
 out:
     memory_region_unref(mem);
 }
+
+static void framebuffer_swap(enum framebuffer_swapmode swapmode,
+                             pixman_image_t *dest, void *src)
+{
+    int swaps;
+    uint32_t *s32, *d32;
+    uint16_t *s16, *d16;
+
+    switch (swapmode) {
+    case FB_SWAP_NONE:
+        memcpy(pixman_image_get_data(dest),
+               src,
+               pixman_image_get_stride(dest));
+        break;
+    case FB_SWAP_16_BYTES:
+        swaps = pixman_image_get_stride(dest) / 2;
+        s16 = src;
+        d16 = (void*)pixman_image_get_data(dest);
+        while (swaps) {
+            *d16 = bswap16(*s16);
+            s16++; d16++; swaps--;
+        }
+        break;
+    case FB_SWAP_32_BYTES:
+        swaps = pixman_image_get_stride(dest) / 4;
+        s32 = src;
+        d32 = pixman_image_get_data(dest);
+        while (swaps) {
+            *d32 = bswap32(*s32);
+            s32++; d32++; swaps--;
+        }
+        break;
+    case FB_SWAP_32_WORDS:
+        swaps = pixman_image_get_stride(dest) / 4;
+        s32 = src;
+        d32 = pixman_image_get_data(dest);
+        while (swaps) {
+            *d32 = (((*s32 & 0x0000ffff) << 16) |
+                    ((*s32 & 0xffff0000) >> 16));
+            s32++; d32++; swaps--;
+        }
+        break;
+    default:
+        g_assert_not_reached();
+    }
+}
+
+void framebuffer_update_display_swap_pixman(
+    DisplaySurface *ds,
+    MemoryRegion *address_space,
+    hwaddr base,
+    enum framebuffer_swapmode swapmode,
+    pixman_format_code_t format,
+    int invalidate, /* nonzero to redraw the whole image.  */
+    int *first_row, /* Input and output.  */
+    int *last_row /* Output only */)
+{
+    int cols = surface_width(ds);
+    int rows = surface_height(ds);
+    int src_width = cols * PIXMAN_FORMAT_BPP(format) / 8;
+    pixman_image_t *linebuf;
+    hwaddr src_len;
+    uint8_t *src;
+    uint8_t *src_base;
+    int first, last = 0;
+    int dirty;
+    int i;
+    ram_addr_t addr;
+    MemoryRegionSection mem_section;
+    MemoryRegion *mem;
+
+    i = *first_row;
+    *first_row = -1;
+    src_len = src_width * rows;
+
+    mem_section = memory_region_find(address_space, base, src_len);
+    mem = mem_section.mr;
+    if (int128_get64(mem_section.size) != src_len ||
+        !memory_region_is_ram(mem_section.mr)) {
+        goto out;
+    }
+    assert(mem);
+    assert(mem_section.offset_within_address_space == base);
+
+    memory_region_sync_dirty_bitmap(mem);
+    src_base = cpu_physical_memory_map(base, &src_len, 0);
+    /* If we can't map the framebuffer then bail.  We could try harder,
+       but it's not really worth it as dirty flag tracking will probably
+       already have failed above.  */
+    if (!src_base)
+        goto out;
+    if (src_len != src_width * rows) {
+        cpu_physical_memory_unmap(src_base, src_len, 0, 0);
+        goto out;
+    }
+    src = src_base;
+    first = -1;
+    addr = mem_section.offset_within_region;
+
+    addr += i * src_width;
+    src += i * src_width;
+
+    linebuf = qemu_pixman_linebuf_create(format, cols);
+    for (; i < rows; i++) {
+        dirty = memory_region_get_dirty(mem, addr, src_width,
+                                        DIRTY_MEMORY_VGA);
+        if (dirty || invalidate) {
+            framebuffer_swap(swapmode, linebuf, src);
+            qemu_pixman_linebuf_copy(ds->image, cols, 0, i, linebuf);
+            if (first == -1)
+                first = i;
+            last = i;
+        }
+        addr += src_width;
+        src += src_width;
+    }
+    qemu_pixman_image_unref(linebuf);
+
+    cpu_physical_memory_unmap(src_base, src_len, 0, 0);
+    if (first < 0) {
+        goto out;
+    }
+    memory_region_reset_dirty(mem, mem_section.offset_within_region, src_len,
+                              DIRTY_MEMORY_VGA);
+    *first_row = first;
+    *last_row = last;
+out:
+    memory_region_unref(mem);
+}

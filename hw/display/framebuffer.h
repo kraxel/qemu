@@ -22,4 +22,21 @@ void framebuffer_update_display(
     int *first_row,
     int *last_row);
 
+enum framebuffer_swapmode {
+    FB_SWAP_NONE = 0,
+    FB_SWAP_16_BYTES,
+    FB_SWAP_32_BYTES,
+    FB_SWAP_32_WORDS,
+};
+
+void framebuffer_update_display_swap_pixman(
+    DisplaySurface *ds,
+    MemoryRegion *address_space,
+    hwaddr base,
+    enum framebuffer_swapmode,
+    pixman_format_code_t format,
+    int invalidate, /* nonzero to redraw the whole image.  */
+    int *first_row, /* Input and output.  */
+    int *last_row /* Output only */);
+
 #endif
