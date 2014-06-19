@@ -205,7 +205,8 @@ static void pl110_update_display(void *opaque)
     if (s->invalidate ||
         surface_width(surface) != s->cols ||
         surface_height(surface) != s->rows) {
-        if (pl110_draw[bpp_offset].fmt) {
+        if (pl110_draw[bpp_offset].fmt &&
+            pl110_draw[bpp_offset].swap == FB_SWAP_NONE) {
             surface = qemu_create_displaysurface_guestmem
                 (s->cols, s->rows, pl110_draw[bpp_offset].fmt, 0, s->upbase);
             dpy_gfx_replace_surface(s->con, surface);
@@ -223,15 +224,22 @@ static void pl110_update_display(void *opaque)
                              s->upbase, s->invalidate);
     } else {
         g_assert(surface_bits_per_pixel(surface) == 32);
-        dest_width = 4 * s->cols;
         first = 0;
-        fn = pl110_draw[bpp_offset].fn;
-        framebuffer_update_display(surface, sysbus_address_space(sbd),
-                                   s->upbase, s->cols, s->rows,
-                                   src_width, dest_width, 0,
-                                   s->invalidate,
-                                   fn, s->palette,
-                                   &first, &last);
+        if (pl110_draw[bpp_offset].fmt) {
+            framebuffer_update_display_swap_pixman
+                (surface, sysbus_address_space(sbd), s->upbase,
+                 pl110_draw[bpp_offset].swap, pl110_draw[bpp_offset].fmt,
+                 s->invalidate, &first, &last);
+        } else {
+            dest_width = 4 * s->cols;
+            fn = pl110_draw[bpp_offset].fn;
+            framebuffer_update_display(surface, sysbus_address_space(sbd),
+                                       s->upbase, s->cols, s->rows,
+                                       src_width, dest_width, 0,
+                                       s->invalidate,
+                                       fn, s->palette,
+                                       &first, &last);
+        }
         if (first >= 0) {
             dpy_gfx_update(s->con, 0, first, s->cols, last - first + 1);
         }

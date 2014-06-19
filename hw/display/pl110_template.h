@@ -41,16 +41,29 @@
 static struct {
     drawfn fn;
     pixman_format_code_t fmt;
+    enum framebuffer_swapmode swap;
 } pl110_draw[48] = {
     { .fn = pl110_draw_line1_lblp_bgr },
     { .fn = pl110_draw_line2_lblp_bgr },
     { .fn = pl110_draw_line4_lblp_bgr },
     { .fn = pl110_draw_line8_lblp_bgr },
-    { .fn = pl110_draw_line16_555_lblp_bgr, .fmt = LEBE(PIXMAN_x1r5g5b5, 0) },
-    { .fn = pl110_draw_line32_lblp_bgr,     .fmt = LEBE(PIXMAN_x8r8g8b8,
-                                                        PIXMAN_b8g8r8a8)    },
-    { .fn = pl110_draw_line16_lblp_bgr,     .fmt = LEBE(PIXMAN_r5g6b5,   0) },
-    { .fn = pl110_draw_line12_lblp_bgr,     .fmt = LEBE(PIXMAN_x4r4g4b4, 0) },
+    {
+        .fn   = pl110_draw_line16_555_lblp_bgr,
+        .fmt  = PIXMAN_x1r5g5b5,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES),
+    },{
+        .fn   = pl110_draw_line32_lblp_bgr,
+        .fmt  = LEBE(PIXMAN_x8r8g8b8, PIXMAN_b8g8r8a8),
+        .swap = FB_SWAP_NONE
+    },{
+        .fn   = pl110_draw_line16_lblp_bgr,
+        .fmt  = PIXMAN_r5g6b5,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES),
+    },{
+        .fn   = pl110_draw_line12_lblp_bgr,
+        .fmt  = PIXMAN_x4r4g4b4,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES)
+    },
 
     { .fn = pl110_draw_line1_bbbp_bgr },
     { .fn = pl110_draw_line2_bbbp_bgr },
@@ -66,11 +79,23 @@ static struct {
     { .fn = pl110_draw_line2_lbbp_bgr },
     { .fn = pl110_draw_line4_lbbp_bgr },
     { .fn = pl110_draw_line8_lbbp_bgr },
-    { .fn = pl110_draw_line16_555_lbbp_bgr, .fmt = LEBE(PIXMAN_x1r5g5b5, 0) },
-    { .fn = pl110_draw_line32_lbbp_bgr,     .fmt = LEBE(PIXMAN_x8r8g8b8,
-                                                        PIXMAN_b8g8r8a8)    },
-    { .fn = pl110_draw_line16_lbbp_bgr,     .fmt = LEBE(PIXMAN_r5g6b5,   0) },
-    { .fn = pl110_draw_line12_lbbp_bgr,     .fmt = LEBE(PIXMAN_x4r4g4b4, 0) },
+    {
+        .fn = pl110_draw_line16_555_lbbp_bgr,
+        .fmt  = PIXMAN_x1r5g5b5,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES),
+    },{
+        .fn = pl110_draw_line32_lbbp_bgr,
+        .fmt  = LEBE(PIXMAN_x8r8g8b8, PIXMAN_b8g8r8a8),
+        .swap = FB_SWAP_NONE
+    },{
+        .fn = pl110_draw_line16_lbbp_bgr,
+        .fmt  = PIXMAN_r5g6b5,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES),
+    },{
+        .fn = pl110_draw_line12_lbbp_bgr,
+        .fmt  = PIXMAN_x4r4g4b4,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES)
+    },
 
     { .fn = pl110_draw_line1_lblp_rgb },
     { .fn = pl110_draw_line2_lblp_rgb },
