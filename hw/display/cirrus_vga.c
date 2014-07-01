@@ -260,6 +260,7 @@ static uint8_t rop_to_index[256];
 
 static void cirrus_bitblt_reset(CirrusVGAState *s);
 static void cirrus_update_memory_access(CirrusVGAState *s);
+static void cirrus_update_cursor(CirrusVGAState *s);
 
 /***************************************
  *
@@ -1331,6 +1332,7 @@ static void cirrus_vga_write_sr(CirrusVGAState * s, uint32_t val)
     case 0xf0:			// Graphics Cursor X
 	s->vga.sr[0x10] = val;
         s->vga.hw_cursor_x = (val << 3) | (s->vga.sr_index >> 5);
+        cirrus_update_cursor(s);
 	break;
     case 0x11:
     case 0x31:
@@ -1342,6 +1344,7 @@ static void cirrus_vga_write_sr(CirrusVGAState * s, uint32_t val)
     case 0xf1:			// Graphics Cursor Y
 	s->vga.sr[0x11] = val;
         s->vga.hw_cursor_y = (val << 3) | (s->vga.sr_index >> 5);
+        cirrus_update_cursor(s);
 	break;
     case 0x07:			// Extended Sequencer Mode
     cirrus_update_memory_access(s);
@@ -1353,7 +1356,6 @@ static void cirrus_vga_write_sr(CirrusVGAState * s, uint32_t val)
     case 0x0d:			// VCLK 2
     case 0x0e:			// VCLK 3
     case 0x0f:			// DRAM Control
-    case 0x13:			// Graphics Cursor Pattern Address
     case 0x14:			// Scratch Register 2
     case 0x15:			// Scratch Register 3
     case 0x16:			// Performance Tuning Register
@@ -1378,6 +1380,11 @@ static void cirrus_vga_write_sr(CirrusVGAState * s, uint32_t val)
         printf("cirrus: cursor ctl SR12=%02x (force shadow: %d)\n",
                val, s->vga.force_shadow);
 #endif
+        cirrus_update_cursor(s);
+        break;
+    case 0x13:                  // Graphics Cursor Pattern Address
+        s->vga.sr[0x13] = val;
+        cirrus_update_cursor(s);
         break;
     case 0x17:			// Configuration Readback and Extended Control
 	s->vga.sr[s->vga.sr_index] = (s->vga.sr[s->vga.sr_index] & 0x38)
@@ -2121,6 +2128,88 @@ static const MemoryRegionOps cirrus_vga_mem_ops = {
  *  hardware cursor
  *
  ***************************************/
+
+static void cirrus_update_cursor(CirrusVGAState *s)
+{
+    const uint8_t *color, *mask, *palette;
+    uint32_t size, pitch, *img, *xor, x, y, bit, color0, color1;
+    bool have_xor;
+
+    if (s->vga.hw_cursor_img) {
+        pixman_image_unref(s->vga.hw_cursor_img);
+        s->vga.hw_cursor_img = NULL;
+    }
+    if (s->vga.hw_cursor_xor) {
+        pixman_image_unref(s->vga.hw_cursor_xor);
+        s->vga.hw_cursor_xor = NULL;
+    }
+
+    if (!(s->vga.sr[0x12] & CIRRUS_CURSOR_SHOW)) {
+        return;
+    }
+
+    color = s->vga.vram_ptr + s->real_vram_size - 16 * 1024;
+    if (s->vga.sr[0x12] & CIRRUS_CURSOR_LARGE) {
+        color += (s->vga.sr[0x13] & 0x3c) * 256;
+        mask   = color + 8;
+        size   = 64;
+        pitch  = 16;
+    } else {
+        color += (s->vga.sr[0x13] & 0x3f) * 256;
+        mask   = color + 128;
+        size   = 32;
+        pitch  = 4;
+    }
+
+    palette = s->cirrus_hidden_palette;
+    color0 = ((c6_to_8(palette[0x0 * 3 + 0]) << 16) |
+              (c6_to_8(palette[0x0 * 3 + 1]) <<  8) |
+              (c6_to_8(palette[0x0 * 3 + 2]) <<  0));
+    color1 = ((c6_to_8(palette[0xf * 3 + 0]) << 16) |
+              (c6_to_8(palette[0xf * 3 + 1]) <<  8) |
+              (c6_to_8(palette[0xf * 3 + 2]) <<  0));
+
+    s->vga.hw_cursor_img = pixman_image_create_bits
+        (PIXMAN_a8r8g8b8, size, size, NULL, size * 4);
+    s->vga.hw_cursor_xor = pixman_image_create_bits
+        (PIXMAN_a8r8g8b8, size, size, NULL, size * 4);
+    img = pixman_image_get_data(s->vga.hw_cursor_img);
+    xor = pixman_image_get_data(s->vga.hw_cursor_xor);
+    have_xor = false;
+    for (y = 0; y < size; y++) {
+        bit = 0x80;
+        for (x = 0; x < size; x++, img++, xor++) {
+            if (!(mask[x/8] & bit)) {
+                if (!(color[x/8] & bit)) {
+                    *img = 0x00000000;
+                    *xor = 0x00000000;
+                } else {
+                    *img = 0x00000000;
+                    *xor = 0x00ffffff;
+                    have_xor = true;
+                }
+            } else {
+                if (!(color[x/8] & bit)) {
+                    *img = 0xff000000 | color0;
+                    *xor = 0x00000000;
+                } else {
+                    *img = 0xff000000 | color1;
+                    *xor = 0x00000000;
+                }
+            }
+            bit >>= 1;
+            if (bit == 0) {
+                bit = 0x80;
+            }
+        }
+        color += pitch;
+        mask  += pitch;
+    }
+    if (!have_xor) {
+        pixman_image_unref(s->vga.hw_cursor_xor);
+        s->vga.hw_cursor_xor = NULL;
+    }
+}
 
 static inline void invalidate_cursor1(CirrusVGAState *s)
 {

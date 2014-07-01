@@ -165,6 +165,8 @@ typedef struct VGACommonState {
     uint32_t invalidated_y_table[VGA_MAX_HEIGHT / 32];
     uint32_t hw_cursor_x;
     uint32_t hw_cursor_y;
+    pixman_image_t *hw_cursor_xor;
+    pixman_image_t *hw_cursor_img;
     void (*cursor_invalidate)(struct VGACommonState *s);
     void (*cursor_draw_line)(struct VGACommonState *s, uint8_t *d, int y);
     /* tell for each page if it has been updated since the last time */
