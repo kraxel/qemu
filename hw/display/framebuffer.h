@@ -35,6 +35,7 @@ void framebuffer_update_display_swap_pixman(
     hwaddr base,
     enum framebuffer_swapmode,
     pixman_format_code_t format,
+    pixman_indexed_t *palette,
     int invalidate, /* nonzero to redraw the whole image.  */
     int *first_row, /* Input and output.  */
     int *last_row /* Output only */);

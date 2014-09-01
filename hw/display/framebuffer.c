@@ -168,6 +168,7 @@ void framebuffer_update_display_swap_pixman(
     hwaddr base,
     enum framebuffer_swapmode swapmode,
     pixman_format_code_t format,
+    pixman_indexed_t *palette,
     int invalidate, /* nonzero to redraw the whole image.  */
     int *first_row, /* Input and output.  */
     int *last_row /* Output only */)
@@ -218,6 +219,7 @@ void framebuffer_update_display_swap_pixman(
     src += i * src_width;
 
     linebuf = qemu_pixman_linebuf_create(format, cols);
+    pixman_image_set_indexed(linebuf, palette);
     for (; i < rows; i++) {
         dirty = memory_region_get_dirty(mem, addr, src_width,
                                         DIRTY_MEMORY_VGA);

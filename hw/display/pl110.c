@@ -60,7 +60,7 @@ typedef struct PL110State {
     enum pl110_bppmode bpp;
     int invalidate;
     uint32_t mux_ctrl;
-    uint32_t palette[256];
+    pixman_indexed_t pixman_palette;
     uint32_t raw_palette[128];
     qemu_irq irq;
 } PL110State;
@@ -84,7 +84,7 @@ static const VMStateDescription vmstate_pl110 = {
         VMSTATE_INT32(rows, PL110State),
         VMSTATE_UINT32(bpp, PL110State),
         VMSTATE_INT32(invalidate, PL110State),
-        VMSTATE_UINT32_ARRAY(palette, PL110State, 256),
+        VMSTATE_UINT32_ARRAY(pixman_palette.rgba, PL110State, 256),
         VMSTATE_UINT32_ARRAY(raw_palette, PL110State, 128),
         VMSTATE_UINT32_V(mux_ctrl, PL110State, 2),
         VMSTATE_END_OF_LIST()
@@ -206,9 +206,19 @@ static void pl110_update_display(void *opaque)
         surface_width(surface) != s->cols ||
         surface_height(surface) != s->rows) {
         if (pl110_draw[bpp_offset].fmt &&
+#if 1
+            /*
+             * Don't expose paletted pixman images to ui for now.
+             * There are truecolor format assumtions in some places,
+             * basically everything using PixelFormat, SDL code for
+             * example.
+             */
+            PIXMAN_FORMAT_BPP(pl110_draw[bpp_offset].fmt) > 8 &&
+#endif
             pl110_draw[bpp_offset].swap == FB_SWAP_NONE) {
             surface = qemu_create_displaysurface_guestmem
                 (s->cols, s->rows, pl110_draw[bpp_offset].fmt, 0, s->upbase);
+            pixman_image_set_indexed(surface->image, &s->pixman_palette);
             dpy_gfx_replace_surface(s->con, surface);
         } else {
             qemu_console_resize(s->con, s->cols, s->rows);
@@ -229,7 +239,7 @@ static void pl110_update_display(void *opaque)
             framebuffer_update_display_swap_pixman
                 (surface, sysbus_address_space(sbd), s->upbase,
                  pl110_draw[bpp_offset].swap, pl110_draw[bpp_offset].fmt,
-                 s->invalidate, &first, &last);
+                 &s->pixman_palette, s->invalidate, &first, &last);
         } else {
             dest_width = 4 * s->cols;
             fn = pl110_draw[bpp_offset].fn;
@@ -237,7 +247,7 @@ static void pl110_update_display(void *opaque)
                                        s->upbase, s->cols, s->rows,
                                        src_width, dest_width, 0,
                                        s->invalidate,
-                                       fn, s->palette,
+                                       fn, s->pixman_palette.rgba,
                                        &first, &last);
         }
         if (first >= 0) {
@@ -272,7 +282,7 @@ static void pl110_update_palette(PL110State *s, int n)
         b = (raw & 0x1f) << 3;
         /* The I bit is ignored.  */
         raw >>= 6;
-        s->palette[n] = rgb_to_pixel32(r, g, b);
+        s->pixman_palette.rgba[n] = rgb_to_pixel32(r, g, b);
         n++;
     }
 }

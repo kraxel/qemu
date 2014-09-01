@@ -43,11 +43,21 @@ static struct {
     pixman_format_code_t fmt;
     enum framebuffer_swapmode swap;
 } pl110_draw[48] = {
-    { .fn = pl110_draw_line1_lblp_bgr },
-    { .fn = pl110_draw_line2_lblp_bgr },
-    { .fn = pl110_draw_line4_lblp_bgr },
-    { .fn = pl110_draw_line8_lblp_bgr },
     {
+        .fn   = pl110_draw_line1_lblp_bgr,
+        .fmt  = PIXMAN_g1,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_32_BYTES),
+    },{
+        .fn   = pl110_draw_line2_lblp_bgr,
+    },{
+        .fn   = pl110_draw_line4_lblp_bgr,
+        .fmt  = PIXMAN_c4,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_32_BYTES),
+    },{
+        .fn   = pl110_draw_line8_lblp_bgr,
+        .fmt  = PIXMAN_c8,
+        .swap = LEBE(FB_SWAP_NONE, FB_SWAP_32_BYTES),
+    },{
         .fn   = pl110_draw_line16_555_lblp_bgr,
         .fmt  = PIXMAN_x1r5g5b5,
         .swap = LEBE(FB_SWAP_NONE, FB_SWAP_16_BYTES),
