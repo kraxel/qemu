@@ -440,4 +440,35 @@ static inline unsigned long leul_to_cpu(unsigned long v)
 #undef le_bswaps
 #undef be_bswaps
 
+/* to using sparse checker for endianess checks */
+
+#ifdef __CHECKER__
+#define __qemu_bitwise__ __attribute__((bitwise))
+#define __qemu_force__   __attribute__((force))
+#else
+#define __qemu_bitwise__
+#define __qemu_force__
+#endif
+
+typedef uint16_t __qemu_bitwise__ le16_t;
+typedef uint16_t __qemu_bitwise__ be16_t;
+typedef uint32_t __qemu_bitwise__ le32_t;
+typedef uint32_t __qemu_bitwise__ be32_t;
+typedef uint64_t __qemu_bitwise__ le64_t;
+typedef uint64_t __qemu_bitwise__ be64_t;
+
+#define chk_le16_to_cpu(_x) (le16_to_cpu((__qemu_force__ uint16_t)_x))
+#define chk_be16_to_cpu(_x) (be16_to_cpu((__qemu_force__ uint16_t)_x))
+#define chk_le32_to_cpu(_x) (le32_to_cpu((__qemu_force__ uint32_t)_x))
+#define chk_be32_to_cpu(_x) (be32_to_cpu((__qemu_force__ uint32_t)_x))
+#define chk_le64_to_cpu(_x) (le64_to_cpu((__qemu_force__ uint64_t)_x))
+#define chk_be64_to_cpu(_x) (be64_to_cpu((__qemu_force__ uint64_t)_x))
+
+#define chk_cpu_to_le16(_x) ((__qemu_force__ le16_t)cpu_to_le16(_x))
+#define chk_cpu_to_be16(_x) ((__qemu_force__ be16_t)cpu_to_be16(_x))
+#define chk_cpu_to_le32(_x) ((__qemu_force__ le32_t)cpu_to_le32(_x))
+#define chk_cpu_to_be32(_x) ((__qemu_force__ be32_t)cpu_to_be32(_x))
+#define chk_cpu_to_le64(_x) ((__qemu_force__ le64_t)cpu_to_le64(_x))
+#define chk_cpu_to_be64(_x) ((__qemu_force__ be64_t)cpu_to_be64(_x))
+
 #endif /* BSWAP_H */
