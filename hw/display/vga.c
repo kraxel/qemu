@@ -1630,8 +1630,10 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
                 page_max = page1;
             if (!(is_buffer_shared(surface))) {
                 vga_draw_line(s, d, s->vram_ptr + addr, width);
+#if 0
                 if (s->cursor_draw_line)
                     s->cursor_draw_line(s, d, y);
+#endif
             }
         } else {
             if (y_start >= 0) {
@@ -1655,6 +1657,28 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
             addr1 = 0;
         d += linesize;
     }
+#if 1
+    if (s->hw_cursor_img && !is_buffer_shared(surface)) {
+        if (s->hw_cursor_xor) {
+            pixman_image_composite(PIXMAN_OP_XOR, surface->image,
+                                   s->hw_cursor_xor, surface->image,
+                                   s->hw_cursor_x,
+                                   s->hw_cursor_y,
+                                   0, 0,
+                                   s->hw_cursor_x,
+                                   s->hw_cursor_y,
+                                   pixman_image_get_width(s->hw_cursor_xor),
+                                   pixman_image_get_height(s->hw_cursor_xor));
+        }
+        pixman_image_composite(PIXMAN_OP_OVER, s->hw_cursor_img,
+                               NULL, surface->image,
+                               0, 0, 0, 0,
+                               s->hw_cursor_x,
+                               s->hw_cursor_y,
+                               pixman_image_get_width(s->hw_cursor_img),
+                               pixman_image_get_height(s->hw_cursor_img));
+    }
+#endif
     if (y_start >= 0) {
         /* flush to display */
         dpy_gfx_update(s->con, 0, y_start,
