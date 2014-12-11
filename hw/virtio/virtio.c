@@ -965,7 +965,7 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
     vmstate_save_state(f, &vmstate_virtio, vdev, NULL);
 }
 
-int virtio_set_features(VirtIODevice *vdev, uint64_t val)
+static int __virtio_set_features(VirtIODevice *vdev, uint64_t val)
 {
     BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
     VirtioBusClass *vbusk = VIRTIO_BUS_GET_CLASS(qbus);
@@ -979,6 +979,18 @@ int virtio_set_features(VirtIODevice *vdev, uint64_t val)
     }
     vdev->guest_features = val;
     return bad ? -1 : 0;
+}
+
+int virtio_set_features(VirtIODevice *vdev, uint64_t val)
+{
+   /*
+     * The driver must not attempt to set features after feature negotiation
+     * has finished.
+     */
+    if (vdev->status & VIRTIO_CONFIG_S_FEATURES_OK) {
+        return -EINVAL;
+    }
+    return __virtio_set_features(vdev, val);
 }
 
 int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
@@ -1013,7 +1025,7 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
     qemu_get_be32s(f, &features);
 
     /* XXX features >= 32 */
-    if (virtio_set_features(vdev, features) < 0) {
+    if (__virtio_set_features(vdev, features) < 0) {
         supported_features = k->get_features(qbus->parent);
         error_report("Features 0x%x unsupported. Allowed features: 0x%lx",
                      features, supported_features);
