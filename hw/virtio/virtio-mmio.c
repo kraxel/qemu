@@ -80,7 +80,7 @@ typedef struct {
     SysBusDevice parent_obj;
     MemoryRegion iomem;
     qemu_irq irq;
-    uint32_t host_features;
+    uint64_t host_features;
     /* Guest accessible state needing migration and reset */
     uint32_t host_features_sel;
     uint32_t guest_features_sel;
@@ -306,7 +306,7 @@ static void virtio_mmio_update_irq(DeviceState *opaque, uint16_t vector)
     qemu_set_irq(proxy->irq, level);
 }
 
-static unsigned int virtio_mmio_get_features(DeviceState *opaque)
+static uint64_t virtio_mmio_get_features(DeviceState *opaque)
 {
     VirtIOMMIOProxy *proxy = VIRTIO_MMIO(opaque);
 

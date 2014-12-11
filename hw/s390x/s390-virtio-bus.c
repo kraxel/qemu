@@ -490,9 +490,10 @@ static void virtio_s390_notify(DeviceState *d, uint16_t vector)
     s390_virtio_irq(0, token);
 }
 
-static unsigned virtio_s390_get_features(DeviceState *d)
+static uint64_t virtio_s390_get_features(DeviceState *d)
 {
     VirtIOS390Device *dev = to_virtio_s390_device(d);
+
     return dev->host_features;
 }
 

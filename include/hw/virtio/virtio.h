@@ -55,6 +55,12 @@
 /* A guest should never accept this.  It implies negotiation is broken. */
 #define VIRTIO_F_BAD_FEATURE		30
 
+/* v1.0 compliant. */
+#define VIRTIO_F_VERSION_1              32
+
+/* The highest feature bit that we support */
+#define VIRTIO_HIGHEST_FEATURE_BIT      32
+
 /* from Linux's linux/virtio_ring.h */
 
 /* This marks a buffer as continuing via the next field. */
@@ -117,7 +123,7 @@ struct VirtIODevice
     uint8_t status;
     uint8_t isr;
     uint16_t queue_sel;
-    uint32_t guest_features;
+    uint64_t guest_features;
     size_t config_len;
     void *config;
     uint16_t config_vector;
@@ -138,9 +144,9 @@ typedef struct VirtioDeviceClass {
     /* This is what a VirtioDevice must implement */
     DeviceRealize realize;
     DeviceUnrealize unrealize;
-    uint32_t (*get_features)(VirtIODevice *vdev, uint32_t requested_features);
-    uint32_t (*bad_features)(VirtIODevice *vdev);
-    void (*set_features)(VirtIODevice *vdev, uint32_t val);
+    uint64_t (*get_features)(VirtIODevice *vdev, uint64_t requested_features);
+    uint64_t (*bad_features)(VirtIODevice *vdev);
+    void (*set_features)(VirtIODevice *vdev, uint64_t val);
     void (*get_config)(VirtIODevice *vdev, uint8_t *config);
     void (*set_config)(VirtIODevice *vdev, const uint8_t *config);
     void (*reset)(VirtIODevice *vdev);
@@ -225,7 +231,7 @@ void virtio_queue_set_vector(VirtIODevice *vdev, int n, uint16_t vector);
 void virtio_set_status(VirtIODevice *vdev, uint8_t val);
 void virtio_reset(void *opaque);
 void virtio_update_irq(VirtIODevice *vdev);
-int virtio_set_features(VirtIODevice *vdev, uint32_t val);
+int virtio_set_features(VirtIODevice *vdev, uint64_t val);
 
 /* Base devices.  */
 typedef struct VirtIOBlkConf VirtIOBlkConf;
@@ -235,9 +241,9 @@ typedef struct VirtIOSCSIConf VirtIOSCSIConf;
 typedef struct VirtIORNGConf VirtIORNGConf;
 
 #define DEFINE_VIRTIO_COMMON_FEATURES(_state, _field) \
-	DEFINE_PROP_BIT("indirect_desc", _state, _field, \
+	DEFINE_PROP_BIT64("indirect_desc", _state, _field, \
 			VIRTIO_RING_F_INDIRECT_DESC, true), \
-	DEFINE_PROP_BIT("event_idx", _state, _field, \
+	DEFINE_PROP_BIT64("event_idx", _state, _field, \
 			VIRTIO_RING_F_EVENT_IDX, true)
 
 hwaddr virtio_queue_get_desc_addr(VirtIODevice *vdev, int n);
@@ -263,22 +269,22 @@ void virtio_queue_set_host_notifier_fd_handler(VirtQueue *vq, bool assign,
 void virtio_queue_notify_vq(VirtQueue *vq);
 void virtio_irq(VirtQueue *vq);
 
-static inline void virtio_add_feature(uint32_t *features, unsigned int fbit)
+static inline void virtio_add_feature(uint64_t *features, unsigned int fbit)
 {
-    assert(fbit < 32);
-    *features |= (1 << fbit);
+    assert(fbit < 64);
+    *features |= (1ULL << fbit);
 }
 
-static inline void virtio_clear_feature(uint32_t *features, unsigned int fbit)
+static inline void virtio_clear_feature(uint64_t *features, unsigned int fbit)
 {
-    assert(fbit < 32);
-    *features &= ~(1 << fbit);
+    assert(fbit < 64);
+    *features &= ~(1ULL << fbit);
 }
 
-static inline bool __virtio_has_feature(uint32_t features, unsigned int fbit)
+static inline bool __virtio_has_feature(uint64_t features, unsigned int fbit)
 {
-    assert(fbit < 32);
-    return !!(features & (1 << fbit));
+    assert(fbit < 64);
+    return !!(features & (1ULL << fbit));
 }
 
 static inline bool virtio_has_feature(VirtIODevice *vdev, unsigned int fbit)
