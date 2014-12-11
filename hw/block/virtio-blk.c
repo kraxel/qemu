@@ -730,6 +730,24 @@ static uint64_t virtio_blk_get_features(VirtIODevice *vdev, uint64_t features)
     return features;
 }
 
+static uint64_t virtio_blk_get_features_rev(VirtIODevice *vdev,
+                                            uint64_t features,
+                                            unsigned int revision)
+{
+    if (revision == 0) {
+        /* legacy */
+        virtio_clear_feature(&features, VIRTIO_F_VERSION_1);
+        return virtio_blk_get_features(vdev, features);
+    }
+    /* virtio 1.0 or later */
+    virtio_clear_feature(&features, VIRTIO_BLK_F_SCSI);
+    virtio_clear_feature(&features, VIRTIO_BLK_F_CONFIG_WCE);
+    virtio_clear_feature(&features, VIRTIO_BLK_F_WCE);
+    /* we're still missing ANY_LAYOUT */
+    /* virtio_add_feature(&features, VIRTIO_F_VERSION_1); */
+    return features;
+}
+
 static void virtio_blk_set_status(VirtIODevice *vdev, uint8_t status)
 {
     VirtIOBlock *s = VIRTIO_BLK(vdev);
@@ -966,6 +984,7 @@ static void virtio_blk_class_init(ObjectClass *klass, void *data)
     vdc->get_config = virtio_blk_update_config;
     vdc->set_config = virtio_blk_set_config;
     vdc->get_features = virtio_blk_get_features;
+    vdc->get_features_rev = virtio_blk_get_features_rev;
     vdc->set_status = virtio_blk_set_status;
     vdc->reset = virtio_blk_reset;
     vdc->save = virtio_blk_save_device;
