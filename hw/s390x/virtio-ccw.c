@@ -20,9 +20,11 @@
 #include "hw/virtio/virtio-net.h"
 #include "hw/sysbus.h"
 #include "qemu/bitops.h"
+#include "hw/virtio/virtio-access.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/s390x/adapter.h"
 #include "hw/s390x/s390_flic.h"
+#include "linux/virtio_config.h"
 
 #include "ioinst.h"
 #include "css.h"
@@ -260,6 +262,12 @@ typedef struct VirtioThinintInfo {
     uint8_t isc;
 } QEMU_PACKED VirtioThinintInfo;
 
+typedef struct VirtioRevInfo {
+    uint16_t revision;
+    uint16_t length;
+    uint8_t data[0];
+} QEMU_PACKED VirtioRevInfo;
+
 /* Specify where the virtqueues for the subchannel are in guest memory. */
 static int virtio_ccw_set_vqs(SubchDev *sch, uint64_t addr, uint32_t align,
                               uint16_t index, uint16_t num)
@@ -299,6 +307,7 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
 {
     int ret;
     VqInfoBlock info;
+    VirtioRevInfo revinfo;
     uint8_t status;
     VirtioFeatDesc features;
     void *config;
@@ -375,6 +384,13 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
                 features.features = (uint32_t)dev->host_features;
             } else if (features.index == 1) {
                 features.features = (uint32_t)(dev->host_features >> 32);
+                /*
+                 * Don't offer version 1 to the guest if it did not
+                 * negotiate at least revision 1.
+                 */
+                if (dev->revision <= 0) {
+                    features.features &= ~(1 << (VIRTIO_F_VERSION_1 - 32));
+                }
             } else {
                 /* Return zeroes if the guest supports more feature bits. */
                 features.features = 0;
@@ -406,6 +422,13 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
                                     (vdev->guest_features & 0xffffffff00000000) |
                                     features.features);
             } else if (features.index == 1) {
+                /*
+                 * The guest should not set version 1 if it didn't
+                 * negotiate a revision >= 1.
+                 */
+                if (dev->revision <= 0) {
+                    features.features &= ~(1 << (VIRTIO_F_VERSION_1 - 32));
+                }
                 virtio_set_features(vdev,
                                     (vdev->guest_features & 0x00000000ffffffff) |
                                     ((uint64_t)features.features << 32));
@@ -608,11 +631,37 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
             }
         }
         break;
+    case CCW_CMD_SET_VIRTIO_REV:
+        len = sizeof(revinfo);
+        if (ccw.count < len || (check_len && ccw.count > len)) {
+            ret = -EINVAL;
+            break;
+        }
+        if (!ccw.cda) {
+            ret = -EFAULT;
+            break;
+        }
+        cpu_physical_memory_read(ccw.cda, &revinfo, len);
+        if (dev->revision >= 0 ||
+            revinfo.revision > virtio_ccw_rev_max(dev)) {
+            ret = -ENOSYS;
+            break;
+        }
+        ret = 0;
+        dev->revision = revinfo.revision;
+        break;
     default:
         ret = -ENOSYS;
         break;
     }
     return ret;
+}
+
+static void virtio_sch_disable_cb(SubchDev *sch)
+{
+    VirtioCcwDevice *dev = sch->driver_data;
+
+    dev->revision = -1;
 }
 
 static void virtio_ccw_device_realize(VirtioCcwDevice *dev,
@@ -734,12 +783,15 @@ static void virtio_ccw_device_realize(VirtioCcwDevice *dev,
     css_sch_build_virtual_schib(sch, 0, VIRTIO_CCW_CHPID_TYPE);
 
     sch->ccw_cb = virtio_ccw_cb;
+    sch->disable_cb = virtio_sch_disable_cb;
 
     /* Build senseid data. */
     memset(&sch->id, 0, sizeof(SenseId));
     sch->id.reserved = 0xff;
     sch->id.cu_type = VIRTIO_CCW_CU_TYPE;
     sch->id.cu_model = vdev->device_id;
+
+    dev->revision = -1;
 
     /* Set default feature bits that are offered by the host. */
     virtio_add_feature(&dev->host_features, VIRTIO_F_NOTIFY_ON_EMPTY);
