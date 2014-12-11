@@ -593,6 +593,7 @@ void virtio_reset(void *opaque)
     }
 
     vdev->guest_features = 0;
+
     vdev->queue_sel = 0;
     vdev->status = 0;
     vdev->isr = 0;
@@ -911,7 +912,8 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
     qemu_put_8s(f, &vdev->status);
     qemu_put_8s(f, &vdev->isr);
     qemu_put_be16s(f, &vdev->queue_sel);
-    qemu_put_be32s(f, &vdev->guest_features);
+    /* XXX features >= 32 */
+    qemu_put_be32s(f, (uint32_t *)&vdev->guest_features);
     qemu_put_be32(f, vdev->config_len);
     qemu_put_buffer(f, vdev->config, vdev->config_len);
 
@@ -945,12 +947,12 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
     vmstate_save_state(f, &vmstate_virtio, vdev, NULL);
 }
 
-int virtio_set_features(VirtIODevice *vdev, uint32_t val)
+int virtio_set_features(VirtIODevice *vdev, uint64_t val)
 {
     BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
     VirtioBusClass *vbusk = VIRTIO_BUS_GET_CLASS(qbus);
     VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(vdev);
-    uint32_t supported_features = vbusk->get_features(qbus->parent);
+    uint64_t supported_features = vbusk->get_features(qbus->parent);
     bool bad = (val & ~supported_features) != 0;
 
     val &= supported_features;
@@ -967,7 +969,7 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
     int32_t config_len;
     uint32_t num;
     uint32_t features;
-    uint32_t supported_features;
+    uint64_t supported_features;
     BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
     VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
     VirtioDeviceClass *vdc = VIRTIO_DEVICE_GET_CLASS(vdev);
@@ -992,9 +994,10 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
     }
     qemu_get_be32s(f, &features);
 
+    /* XXX features >= 32 */
     if (virtio_set_features(vdev, features) < 0) {
         supported_features = k->get_features(qbus->parent);
-        error_report("Features 0x%x unsupported. Allowed features: 0x%x",
+        error_report("Features 0x%x unsupported. Allowed features: 0x%lx",
                      features, supported_features);
         return -1;
     }

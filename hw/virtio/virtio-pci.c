@@ -434,9 +434,10 @@ static void virtio_write_config(PCIDevice *pci_dev, uint32_t address,
     }
 }
 
-static unsigned virtio_pci_get_features(DeviceState *d)
+static uint64_t virtio_pci_get_features(DeviceState *d)
 {
     VirtIOPCIProxy *proxy = to_virtio_pci_proxy(d);
+
     return proxy->host_features;
 }
 

@@ -92,7 +92,7 @@ struct VirtIOS390Device {
     ram_addr_t feat_offs;
     uint8_t feat_len;
     VirtIODevice *vdev;
-    uint32_t host_features;
+    uint64_t host_features;
     VirtioBusState bus;
 };
 

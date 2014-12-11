@@ -38,16 +38,16 @@
     (offsetof(container, field) + sizeof(((container *)0)->field))
 
 typedef struct VirtIOFeature {
-    uint32_t flags;
+    uint64_t flags;
     size_t end;
 } VirtIOFeature;
 
 static VirtIOFeature feature_sizes[] = {
-    {.flags = 1 << VIRTIO_NET_F_MAC,
+    {.flags = 1ULL << VIRTIO_NET_F_MAC,
      .end = endof(struct virtio_net_config, mac)},
-    {.flags = 1 << VIRTIO_NET_F_STATUS,
+    {.flags = 1ULL << VIRTIO_NET_F_STATUS,
      .end = endof(struct virtio_net_config, status)},
-    {.flags = 1 << VIRTIO_NET_F_MQ,
+    {.flags = 1ULL << VIRTIO_NET_F_MQ,
      .end = endof(struct virtio_net_config, max_virtqueue_pairs)},
     {}
 };
@@ -441,7 +441,7 @@ static void virtio_net_set_queues(VirtIONet *n)
 
 static void virtio_net_set_multiqueue(VirtIONet *n, int multiqueue);
 
-static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
+static uint64_t virtio_net_get_features(VirtIODevice *vdev, uint64_t features)
 {
     VirtIONet *n = VIRTIO_NET(vdev);
     NetClientState *nc = qemu_get_queue(n->nic);
@@ -471,9 +471,9 @@ static uint32_t virtio_net_get_features(VirtIODevice *vdev, uint32_t features)
     return vhost_net_get_features(get_vhost_net(nc->peer), features);
 }
 
-static uint32_t virtio_net_bad_features(VirtIODevice *vdev)
+static uint64_t virtio_net_bad_features(VirtIODevice *vdev)
 {
-    uint32_t features = 0;
+    uint64_t features = 0;
 
     /* Linux kernel 2.6.25.  It understood MAC (as everyone must),
      * but also these: */
@@ -496,7 +496,7 @@ static void virtio_net_apply_guest_offloads(VirtIONet *n)
             !!(n->curr_guest_offloads & (1ULL << VIRTIO_NET_F_GUEST_UFO)));
 }
 
-static uint64_t virtio_net_guest_offloads_by_features(uint32_t features)
+static uint64_t virtio_net_guest_offloads_by_features(uint64_t features)
 {
     static const uint64_t guest_offloads_mask =
         (1ULL << VIRTIO_NET_F_GUEST_CSUM) |
@@ -514,7 +514,7 @@ static inline uint64_t virtio_net_supported_guest_offloads(VirtIONet *n)
     return virtio_net_guest_offloads_by_features(vdev->guest_features);
 }
 
-static void virtio_net_set_features(VirtIODevice *vdev, uint32_t features)
+static void virtio_net_set_features(VirtIODevice *vdev, uint64_t features)
 {
     VirtIONet *n = VIRTIO_NET(vdev);
     int i;
@@ -1036,7 +1036,7 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
                 return -1;
             error_report("virtio-net unexpected empty queue: "
                     "i %zd mergeable %d offset %zd, size %zd, "
-                    "guest hdr len %zd, host hdr len %zd guest features 0x%x",
+                    "guest hdr len %zd, host hdr len %zd guest features 0x%lx",
                     i, n->mergeable_rx_bufs, offset, size,
                     n->guest_hdr_len, n->host_hdr_len, vdev->guest_features);
             exit(1);
@@ -1552,7 +1552,7 @@ static void virtio_net_guest_notifier_mask(VirtIODevice *vdev, int idx,
                              vdev, idx, mask);
 }
 
-void virtio_net_set_config_size(VirtIONet *n, uint32_t host_features)
+void virtio_net_set_config_size(VirtIONet *n, uint64_t host_features)
 {
     int i, config_size = 0;
     virtio_add_feature(&host_features, VIRTIO_NET_F_MAC);

@@ -371,8 +371,10 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
         } else {
             features.index = ldub_phys(&address_space_memory,
                                        ccw.cda + sizeof(features.features));
-            if (features.index < ARRAY_SIZE(dev->host_features)) {
-                features.features = dev->host_features[features.index];
+            if (features.index == 0) {
+                features.features = (uint32_t)dev->host_features;
+            } else if (features.index == 1) {
+                features.features = (uint32_t)(dev->host_features >> 32);
             } else {
                 /* Return zeroes if the guest supports more feature bits. */
                 features.features = 0;
@@ -399,8 +401,14 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
             features.index = ldub_phys(&address_space_memory,
                                        ccw.cda + sizeof(features.features));
             features.features = ldl_le_phys(&address_space_memory, ccw.cda);
-            if (features.index < ARRAY_SIZE(dev->host_features)) {
-                virtio_set_features(vdev, features.features);
+            if (features.index == 0) {
+                virtio_set_features(vdev,
+                                    (vdev->guest_features & 0xffffffff00000000) |
+                                    features.features);
+            } else if (features.index == 1) {
+                virtio_set_features(vdev,
+                                    (vdev->guest_features & 0x00000000ffffffff) |
+                                    ((uint64_t)features.features << 32));
             } else {
                 /*
                  * If the guest supports more feature bits, assert that it
@@ -733,12 +741,12 @@ static void virtio_ccw_device_realize(VirtioCcwDevice *dev,
     sch->id.cu_type = VIRTIO_CCW_CU_TYPE;
     sch->id.cu_model = vdev->device_id;
 
-    /* Only the first 32 feature bits are used. */
-    dev->host_features[0] = virtio_bus_get_vdev_features(&dev->bus,
-                                                         dev->host_features[0]);
+    /* Set default feature bits that are offered by the host. */
+    virtio_add_feature(&dev->host_features, VIRTIO_F_NOTIFY_ON_EMPTY);
+    virtio_add_feature(&dev->host_features, VIRTIO_F_BAD_FEATURE);
 
-    virtio_add_feature(&dev->host_features[0], VIRTIO_F_NOTIFY_ON_EMPTY);
-    virtio_add_feature(&dev->host_features[0], VIRTIO_F_BAD_FEATURE);
+    dev->host_features = virtio_bus_get_vdev_features(&dev->bus,
+                                                      dev->host_features);
 
     css_generate_sch_crws(sch->cssid, sch->ssid, sch->schid,
                           parent->hotplugged, 1);
@@ -771,7 +779,7 @@ static void virtio_ccw_net_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     DeviceState *vdev = DEVICE(&dev->vdev);
     Error *err = NULL;
 
-    virtio_net_set_config_size(&dev->vdev, ccw_dev->host_features[0]);
+    virtio_net_set_config_size(&dev->vdev, ccw_dev->host_features);
     virtio_net_set_netclient_name(&dev->vdev, qdev->id,
                                   object_get_typename(OBJECT(qdev)));
     qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
@@ -1077,12 +1085,11 @@ static void virtio_ccw_notify(DeviceState *d, uint16_t vector)
     }
 }
 
-static unsigned virtio_ccw_get_features(DeviceState *d)
+static uint64_t virtio_ccw_get_features(DeviceState *d)
 {
     VirtioCcwDevice *dev = VIRTIO_CCW_DEVICE(d);
 
-    /* Only the first 32 feature bits are used. */
-    return dev->host_features[0];
+    return dev->host_features;
 }
 
 static void virtio_ccw_reset(DeviceState *d)
@@ -1395,7 +1402,7 @@ static int virtio_ccw_load_config(DeviceState *d, QEMUFile *f)
 
 static Property virtio_ccw_net_properties[] = {
     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
-    DEFINE_VIRTIO_NET_FEATURES(VirtioCcwDevice, host_features[0]),
+    DEFINE_VIRTIO_NET_FEATURES(VirtioCcwDevice, host_features),
     DEFINE_PROP_BIT("ioeventfd", VirtioCcwDevice, flags,
                     VIRTIO_CCW_FLAG_USE_IOEVENTFD_BIT, true),
     DEFINE_PROP_END_OF_LIST(),
@@ -1500,7 +1507,7 @@ static const TypeInfo virtio_ccw_balloon = {
 
 static Property virtio_ccw_scsi_properties[] = {
     DEFINE_PROP_STRING("devno", VirtioCcwDevice, bus_id),
-    DEFINE_VIRTIO_SCSI_FEATURES(VirtioCcwDevice, host_features[0]),
+    DEFINE_VIRTIO_SCSI_FEATURES(VirtioCcwDevice, host_features),
     DEFINE_PROP_BIT("ioeventfd", VirtioCcwDevice, flags,
                     VIRTIO_CCW_FLAG_USE_IOEVENTFD_BIT, true),
     DEFINE_PROP_END_OF_LIST(),
@@ -1627,7 +1634,7 @@ static void virtio_ccw_busdev_unplug(HotplugHandler *hotplug_dev,
 }
 
 static Property virtio_ccw_properties[] = {
-    DEFINE_VIRTIO_COMMON_FEATURES(VirtioCcwDevice, host_features[0]),
+    DEFINE_VIRTIO_COMMON_FEATURES(VirtioCcwDevice, host_features),
     DEFINE_PROP_END_OF_LIST(),
 };
 
