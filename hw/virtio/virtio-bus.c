@@ -97,16 +97,26 @@ size_t virtio_bus_get_vdev_config_len(VirtioBusState *bus)
 }
 
 /* Get the features of the plugged device. */
-uint64_t virtio_bus_get_vdev_features(VirtioBusState *bus,
-                                      uint64_t requested_features)
+uint64_t virtio_bus_get_vdev_features_rev(VirtioBusState *bus,
+                                          uint64_t requested_features,
+                                          unsigned int revision)
 {
     VirtIODevice *vdev = virtio_bus_get_device(bus);
     VirtioDeviceClass *k;
 
     assert(vdev != NULL);
     k = VIRTIO_DEVICE_GET_CLASS(vdev);
+    if (revision > 0 && k->get_features_rev) {
+        return k->get_features_rev(vdev, requested_features, revision);
+    }
     assert(k->get_features != NULL);
     return k->get_features(vdev, requested_features);
+}
+
+uint64_t virtio_bus_get_vdev_features(VirtioBusState *bus,
+                                      uint64_t requested_features)
+{
+    return virtio_bus_get_vdev_features_rev(bus, requested_features, 0);
 }
 
 /* Get bad features of the plugged device. */

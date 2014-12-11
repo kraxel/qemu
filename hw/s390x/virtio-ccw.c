@@ -699,6 +699,10 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
         }
         ret = 0;
         dev->revision = revinfo.revision;
+        /* Re-evaluate which features the device wants to offer. */
+        dev->host_features =
+            virtio_bus_get_vdev_features_rev(&dev->bus, dev->host_features,
+                                             dev->revision >= 1 ? 1 : 0);
         break;
     default:
         ret = -ENOSYS;
@@ -712,6 +716,9 @@ static void virtio_sch_disable_cb(SubchDev *sch)
     VirtioCcwDevice *dev = sch->driver_data;
 
     dev->revision = -1;
+    /* Reset the device's features to legacy. */
+    dev->host_features =
+        virtio_bus_get_vdev_features_rev(&dev->bus, dev->host_features, 0);
 }
 
 static void virtio_ccw_device_realize(VirtioCcwDevice *dev,
@@ -847,8 +854,9 @@ static void virtio_ccw_device_realize(VirtioCcwDevice *dev,
     virtio_add_feature(&dev->host_features, VIRTIO_F_NOTIFY_ON_EMPTY);
     virtio_add_feature(&dev->host_features, VIRTIO_F_BAD_FEATURE);
 
-    dev->host_features = virtio_bus_get_vdev_features(&dev->bus,
-                                                      dev->host_features);
+    /* All devices start in legacy mode. */
+    dev->host_features =
+        virtio_bus_get_vdev_features_rev(&dev->bus, dev->host_features, 0);
 
     css_generate_sch_crws(sch->cssid, sch->ssid, sch->schid,
                           parent->hotplugged, 1);
