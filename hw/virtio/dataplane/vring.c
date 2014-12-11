@@ -103,7 +103,7 @@ void vring_teardown(Vring *vring, VirtIODevice *vdev, int n)
 /* Disable guest->host notifies */
 void vring_disable_notification(VirtIODevice *vdev, Vring *vring)
 {
-    if (!(vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX))) {
+    if (!virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         vring->vr.used->flags |= VRING_USED_F_NO_NOTIFY;
     }
 }
@@ -114,7 +114,7 @@ void vring_disable_notification(VirtIODevice *vdev, Vring *vring)
  */
 bool vring_enable_notification(VirtIODevice *vdev, Vring *vring)
 {
-    if (vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX)) {
+    if (virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         vring_avail_event(&vring->vr) = vring->vr.avail->idx;
     } else {
         vring->vr.used->flags &= ~VRING_USED_F_NO_NOTIFY;
@@ -133,12 +133,12 @@ bool vring_should_notify(VirtIODevice *vdev, Vring *vring)
      * interrupts. */
     smp_mb();
 
-    if ((vdev->guest_features & (1 << VIRTIO_F_NOTIFY_ON_EMPTY)) &&
+    if (virtio_has_feature(vdev, VIRTIO_F_NOTIFY_ON_EMPTY) &&
         unlikely(vring->vr.avail->idx == vring->last_avail_idx)) {
         return true;
     }
 
-    if (!(vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX))) {
+    if (!virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         return !(vring->vr.avail->flags & VRING_AVAIL_F_NO_INTERRUPT);
     }
     old = vring->signalled_used;
@@ -388,7 +388,7 @@ int vring_pop(VirtIODevice *vdev, Vring *vring,
 
     /* On success, increment avail index. */
     vring->last_avail_idx++;
-    if (vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX)) {
+    if (virtio_has_feature(vdev, VIRTIO_RING_F_EVENT_IDX)) {
         vring_avail_event(&vring->vr) = vring->last_avail_idx;
     }
 
