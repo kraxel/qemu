@@ -2825,6 +2825,11 @@ EQMP
         .args_type  = "",
         .mhandler.cmd_new = qmp_marshal_input_query_vnc,
     },
+    {
+        .name       = "query-vnc2",
+        .args_type  = "",
+        .mhandler.cmd_new = qmp_marshal_input_query_vnc2,
+    },
 
 SQMP
 query-spice
