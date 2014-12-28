@@ -1020,7 +1020,8 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
     int i, ret;
     int32_t config_len;
     uint32_t num;
-    uint32_t features;
+    uint32_t features_lo, features_hi;
+    uint64_t features;
     uint64_t supported_features;
     BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
     VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
@@ -1044,12 +1045,16 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f, int version_id)
     if (vdev->queue_sel >= VIRTIO_PCI_QUEUE_MAX) {
         return -1;
     }
-    qemu_get_be32s(f, &features);
+    qemu_get_be32s(f, &features_lo);
 
-    /* XXX features >= 32 */
+    //if (features_lo & (1UL << VIRTIO_F_VERSION_1)) {
+        qemu_get_be32s(f, &features_hi);
+    //}
+    features = (((uint64_t)features_hi) << 32) | features_lo;
+
     if (__virtio_set_features(vdev, features) < 0) {
         supported_features = k->get_features(qbus->parent);
-        error_report("Features 0x%x unsupported. Allowed features: 0x%lx",
+        error_report("Features 0x%"PRIx64" unsupported. Allowed features: 0x%"PRIx64,
                      features, supported_features);
         return -1;
     }

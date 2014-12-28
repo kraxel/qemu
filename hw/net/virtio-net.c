@@ -1046,7 +1046,7 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
                 return -1;
             error_report("virtio-net unexpected empty queue: "
                     "i %zd mergeable %d offset %zd, size %zd, "
-                    "guest hdr len %zd, host hdr len %zd guest features 0x%lx",
+                    "guest hdr len %zd, host hdr len %zd guest features 0x%"PRIx64,
                     i, n->mergeable_rx_bufs, offset, size,
                     n->guest_hdr_len, n->host_hdr_len, vdev->guest_features);
             exit(1);
