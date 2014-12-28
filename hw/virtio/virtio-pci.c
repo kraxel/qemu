@@ -17,6 +17,7 @@
 
 #include <inttypes.h>
 
+#include "linux-headers/linux/virtio_pci.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/virtio-blk.h"
 #include "hw/virtio/virtio-net.h"
@@ -75,6 +76,8 @@
 #define VIRTIO_PCI_REGION_SIZE(dev)     (msix_present(dev) ? \
                                          VIRTIO_PCI_CONFIG_MSI : \
                                          VIRTIO_PCI_CONFIG_NOMSI)
+
+#undef VIRTIO_PCI_CONFIG
 
 /* The remaining space is defined by each driver as the per-driver
  * configuration space */
