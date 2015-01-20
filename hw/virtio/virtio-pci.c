@@ -917,7 +917,7 @@ static void virtio_pci_add_mem_cap(VirtIOPCIProxy *proxy,
     PCIDevice *dev = &proxy->pci_dev;
     int offset;
 
-    cap->type_and_bar |= 2 << VIRTIO_PCI_CAP_BAR_SHIFT;
+    cap->bar = 2;
 
     offset = pci_add_capability(dev, PCI_CAP_ID_VNDR, 0, cap->cap_len);
     assert(offset > 0);
@@ -1200,25 +1200,25 @@ static void virtio_pci_device_plugged(DeviceState *d)
 
     if (1) { /* TODO: Make this optional, dependent on virtio 1.0 */
         struct virtio_pci_cap common = {
-            .type_and_bar = VIRTIO_PCI_CAP_COMMON_CFG,
+            .cfg_type = VIRTIO_PCI_CAP_COMMON_CFG,
             .cap_len = sizeof common,
             .offset = cpu_to_le32(0x0),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_cap isr = {
-            .type_and_bar = VIRTIO_PCI_CAP_ISR_CFG,
+            .cfg_type = VIRTIO_PCI_CAP_ISR_CFG,
             .cap_len = sizeof isr,
             .offset = cpu_to_le32(0x1000),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_cap device = {
-            .type_and_bar = VIRTIO_PCI_CAP_DEVICE_CFG,
+            .cfg_type = VIRTIO_PCI_CAP_DEVICE_CFG,
             .cap_len = sizeof device,
             .offset = cpu_to_le32(0x2000),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_notify_cap notify = {
-            .cap.type_and_bar = VIRTIO_PCI_CAP_NOTIFY_CFG,
+            .cap.cfg_type = VIRTIO_PCI_CAP_NOTIFY_CFG,
             .cap.cap_len = sizeof notify,
             .cap.offset = cpu_to_le32(0x3000),
             .cap.length = cpu_to_le32(QEMU_VIRTIO_PCI_QUEUE_MEM_MULT *
