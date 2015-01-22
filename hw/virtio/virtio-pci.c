@@ -965,8 +965,6 @@ static void virtio_pci_add_mem_cap(VirtIOPCIProxy *proxy,
     PCIDevice *dev = &proxy->pci_dev;
     int offset;
 
-    cap->bar = 2;
-
     offset = pci_add_capability(dev, PCI_CAP_ID_VNDR, 0, cap->cap_len);
     assert(offset > 0);
 
@@ -1243,11 +1241,21 @@ static void virtio_pci_device_plugged(DeviceState *d)
         pci_config_set_class(config, proxy->class_code);
     }
 
+    if (proxy->modern_mem_bar > 5) {
+        proxy->modern_mem_bar = 5;
+    }
+    if (proxy->msix_bar > 5) {
+        proxy->msix_bar = 5;
+    }
     if (legacy) {
         /* legacy and transitional */
         pci_set_word(config + PCI_SUBSYSTEM_VENDOR_ID,
                      pci_get_word(config + PCI_VENDOR_ID));
         pci_set_word(config + PCI_SUBSYSTEM_ID, virtio_bus_get_vdev_id(bus));
+        proxy->msix_bar = 1;
+        if (proxy->modern_mem_bar < 2) {
+            proxy->modern_mem_bar = 2;
+        }
     } else {
         /* pure virtio-1.0 */
         pci_set_word(config + PCI_VENDOR_ID,
@@ -1255,6 +1263,9 @@ static void virtio_pci_device_plugged(DeviceState *d)
         pci_set_word(config + PCI_DEVICE_ID,
                      0x1040 + virtio_bus_get_vdev_id(bus));
         pci_config_set_revision(config, 1);
+        if (proxy->msix_bar == proxy->modern_mem_bar) {
+            proxy->msix_bar = (proxy->msix_bar + 2) % 6;
+        }
     }
     config[PCI_INTERRUPT_PIN] = 1;
 
@@ -1263,24 +1274,28 @@ static void virtio_pci_device_plugged(DeviceState *d)
         struct virtio_pci_cap common = {
             .cfg_type = VIRTIO_PCI_CAP_COMMON_CFG,
             .cap_len = sizeof common,
+            .bar = proxy->modern_mem_bar,
             .offset = cpu_to_le32(0x0),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_cap isr = {
             .cfg_type = VIRTIO_PCI_CAP_ISR_CFG,
             .cap_len = sizeof isr,
+            .bar = proxy->modern_mem_bar,
             .offset = cpu_to_le32(0x1000),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_cap device = {
             .cfg_type = VIRTIO_PCI_CAP_DEVICE_CFG,
             .cap_len = sizeof device,
+            .bar = proxy->modern_mem_bar,
             .offset = cpu_to_le32(0x2000),
             .length = cpu_to_le32(0x1000),
         };
         struct virtio_pci_notify_cap notify = {
             .cap.cfg_type = VIRTIO_PCI_CAP_NOTIFY_CFG,
             .cap.cap_len = sizeof notify,
+            .cap.bar = proxy->modern_mem_bar,
             .cap.offset = cpu_to_le32(0x3000),
             .cap.length = cpu_to_le32(QEMU_VIRTIO_PCI_QUEUE_MEM_MULT *
                                       VIRTIO_PCI_QUEUE_MAX),
@@ -1359,12 +1374,14 @@ static void virtio_pci_device_plugged(DeviceState *d)
                               QEMU_VIRTIO_PCI_QUEUE_MEM_MULT *
                               VIRTIO_PCI_QUEUE_MAX);
         memory_region_add_subregion(&proxy->modern_bar, 0x3000, &proxy->notify);
-        pci_register_bar(&proxy->pci_dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY,
+        pci_register_bar(&proxy->pci_dev, proxy->modern_mem_bar,
+                         PCI_BASE_ADDRESS_SPACE_MEMORY,
                          &proxy->modern_bar);
     }
 
     if (proxy->nvectors &&
-        msix_init_exclusive_bar(&proxy->pci_dev, proxy->nvectors, 1)) {
+        msix_init_exclusive_bar(&proxy->pci_dev, proxy->nvectors,
+                                proxy->msix_bar)) {
         error_report("unable to init msix vectors to %" PRIu32,
                      proxy->nvectors);
         proxy->nvectors = 0;

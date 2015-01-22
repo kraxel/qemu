@@ -102,6 +102,8 @@ struct VirtIOPCIProxy {
     uint32_t flags;
     uint32_t class_code;
     uint32_t nvectors;
+    uint32_t msix_bar;
+    uint32_t modern_mem_bar;
     uint64_t host_features;
     uint32_t dfselect;
     uint32_t gfselect;
