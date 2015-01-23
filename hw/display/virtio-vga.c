@@ -79,6 +79,12 @@ static int virtio_vga_init(VirtIOPCIProxy *vpci_dev)
     VGACommonState *vga = &vvga->vga;
 
     qdev_set_parent_bus(DEVICE(g), BUS(&vpci_dev->bus));
+    /* force virtio-1.0 */
+    vpci_dev->flags &= ~VIRTIO_PCI_FLAG_DISABLE_MODERN;
+    vpci_dev->flags |= VIRTIO_PCI_FLAG_DISABLE_LEGACY;
+    /* avoid conflicts with vga framebuffer @ bar 2 */
+    vpci_dev->modern_mem_bar = 0;
+    vpci_dev->msix_bar = 4;
     if (qdev_init(DEVICE(g)) < 0) {
         return -1;
     }
@@ -124,9 +130,6 @@ static void virtio_vga_class_init(ObjectClass *klass, void *data)
 
     k->init = virtio_vga_init;
     pcidev_k->romfile = "vgabios-virtio.bin";
-    pcidev_k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
-    pcidev_k->device_id = PCI_DEVICE_ID_VIRTIO_GPU;
-    pcidev_k->revision = VIRTIO_PCI_ABI_VERSION;
     pcidev_k->class_id = PCI_CLASS_DISPLAY_VGA;
 }
 
