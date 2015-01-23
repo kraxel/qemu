@@ -28,10 +28,10 @@ static int virtio_gpu_pci_init(VirtIOPCIProxy *vpci_dev)
     DeviceState *vdev = DEVICE(&vgpu->vdev);
 
     qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
-    if (qdev_init(vdev) < 0) {
-        return -1;
-    }
-    return 0;
+    /* force virtio-1.0 */
+    vpci_dev->flags &= ~VIRTIO_PCI_FLAG_DISABLE_MODERN;
+    vpci_dev->flags |= VIRTIO_PCI_FLAG_DISABLE_LEGACY;
+    return qdev_init(vdev);
 }
 
 static void virtio_gpu_pci_class_init(ObjectClass *klass, void *data)
@@ -43,9 +43,6 @@ static void virtio_gpu_pci_class_init(ObjectClass *klass, void *data)
     set_bit(DEVICE_CATEGORY_DISPLAY, dc->categories);
     dc->props = virtio_gpu_pci_properties;
     k->init = virtio_gpu_pci_init;
-    pcidev_k->vendor_id = PCI_VENDOR_ID_REDHAT_QUMRANET;
-    pcidev_k->device_id = PCI_DEVICE_ID_VIRTIO_GPU;
-    pcidev_k->revision = VIRTIO_PCI_ABI_VERSION;
     pcidev_k->class_id = PCI_CLASS_DISPLAY_OTHER;
 }
 
