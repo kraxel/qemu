@@ -1263,7 +1263,8 @@ static void virtio_pci_device_plugged(DeviceState *d)
         pci_set_word(config + PCI_DEVICE_ID,
                      0x1040 + virtio_bus_get_vdev_id(bus));
         pci_config_set_revision(config, 1);
-        if (proxy->msix_bar == proxy->modern_mem_bar) {
+        if ((proxy->msix_bar == proxy->modern_mem_bar) ||
+            (proxy->msix_bar == proxy->modern_mem_bar+1)) {
             proxy->msix_bar = (proxy->msix_bar + 2) % 6;
         }
     }
@@ -1301,6 +1302,7 @@ static void virtio_pci_device_plugged(DeviceState *d)
                                       VIRTIO_PCI_QUEUE_MAX),
             .notify_off_multiplier = cpu_to_le32(QEMU_VIRTIO_PCI_QUEUE_MEM_MULT),
         };
+        uint32_t modern_mem_attr;
 
         static const MemoryRegionOps common_ops = {
             .read = virtio_pci_common_read,
@@ -1374,9 +1376,13 @@ static void virtio_pci_device_plugged(DeviceState *d)
                               QEMU_VIRTIO_PCI_QUEUE_MEM_MULT *
                               VIRTIO_PCI_QUEUE_MAX);
         memory_region_add_subregion(&proxy->modern_bar, 0x3000, &proxy->notify);
+        modern_mem_attr = (PCI_BASE_ADDRESS_SPACE_MEMORY |
+                           PCI_BASE_ADDRESS_MEM_PREFETCH);
+        if (!(proxy->modern_mem_bar % 2)) {
+            modern_mem_attr |= PCI_BASE_ADDRESS_MEM_TYPE_64;
+        }
         pci_register_bar(&proxy->pci_dev, proxy->modern_mem_bar,
-                         PCI_BASE_ADDRESS_SPACE_MEMORY,
-                         &proxy->modern_bar);
+                         modern_mem_attr, &proxy->modern_bar);
     }
 
     if (proxy->nvectors &&
