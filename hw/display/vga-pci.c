@@ -325,7 +325,7 @@ static void secondary_class_init(ObjectClass *klass, void *data)
 }
 
 static const TypeInfo vga_info = {
-    .name          = "VGA",
+    .name          = "stdvga",
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(PCIVGAState),
     .class_init    = vga_class_init,

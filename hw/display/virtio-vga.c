@@ -7,7 +7,7 @@
 /*
  * virtio-vga: This extends VirtioPCIProxy.
  */
-#define TYPE_VIRTIO_VGA "virtio-vga"
+#define TYPE_VIRTIO_VGA "VGA"
 #define VIRTIO_VGA(obj) \
         OBJECT_CHECK(VirtIOVGA, (obj), TYPE_VIRTIO_VGA)
 
@@ -15,6 +15,7 @@ typedef struct VirtIOVGA {
     VirtIOPCIProxy parent_obj;
     VirtIOGPU      vdev;
     VGACommonState vga;
+    uint32_t       dummy;
 } VirtIOVGA;
 
 static void virtio_vga_invalidate_display(void *opaque)
@@ -114,6 +115,7 @@ static void virtio_vga_reset(DeviceState *dev)
 static Property virtio_vga_properties[] = {
     DEFINE_VIRTIO_GPU_PROPERTIES(VirtIOVGA, vdev.conf),
     DEFINE_VIRTIO_GPU_PCI_PROPERTIES(VirtIOPCIProxy),
+    DEFINE_PROP_UINT32("vgamem_mb", VirtIOVGA, dummy, 16),
     DEFINE_PROP_END_OF_LIST(),
 };
 
