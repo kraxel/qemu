@@ -153,5 +153,6 @@ clean:
 	$(MAKE) -C sgabios clean
 	rm -f sgabios/.depend
 	$(MAKE) -C ipxe/src veryclean
+	(cd ipxe; rm -f src/config/local/*.h)
 	$(MAKE) -C SLOF clean
 	rm -rf u-boot/build.e500
