@@ -120,12 +120,12 @@ efi-rom-%: build-pxe-roms build-efi-roms
 		-ec ipxe/src/bin-x86_64-efi/$(VID)$(DID).efidrv \
 		-o ../pc-bios/efi-$*.rom
 
-build-pxe-roms: ipxe/src/config/local/general.h
+build-pxe-roms: ipxe/src/config/local/general.h ipxe/src/config/local/branding.h
 	$(MAKE) -C ipxe/src GITVERSION="" \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin/%.rom,$(pxerom_targets))
 
-build-efi-roms: build-pxe-roms ipxe/src/config/local/general.h
+build-efi-roms: build-pxe-roms ipxe/src/config/local/general.h ipxe/src/config/local/branding.h
 	$(MAKE) -C ipxe/src GITVERSION="" \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin-i386-efi/%.efidrv,$(pxerom_targets)) \
