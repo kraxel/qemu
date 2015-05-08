@@ -56,7 +56,7 @@ EGLSurface qemu_egl_init_surface_x11(EGLContext ectx, Window win)
 int qemu_egl_init_dpy(EGLNativeDisplayType dpy, bool gles, bool debug)
 {
     static const EGLint conf_att_gl[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
         EGL_RED_SIZE,   5,
         EGL_GREEN_SIZE, 5,
@@ -65,7 +65,7 @@ int qemu_egl_init_dpy(EGLNativeDisplayType dpy, bool gles, bool debug)
         EGL_NONE,
     };
     static const EGLint conf_att_gles[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE,   5,
         EGL_GREEN_SIZE, 5,

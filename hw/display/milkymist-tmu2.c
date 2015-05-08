@@ -29,9 +29,8 @@
 #include "trace.h"
 #include "qemu/error-report.h"
 
-#include <X11/Xlib.h>
-#include <GL/gl.h>
-#include <GL/glx.h>
+#include "ui/egl-helpers.h"
+#include "ui/egl-context.h"
 
 enum {
     R_CTL = 0,
@@ -88,41 +87,27 @@ struct MilkymistTMU2State {
 
     uint32_t regs[R_MAX];
 
-    Display *dpy;
-    GLXFBConfig glx_fb_config;
-    GLXContext glx_context;
+    QemuConsole *con;
+    qemu_gl_context gl_context;
 };
 typedef struct MilkymistTMU2State MilkymistTMU2State;
 
-static const int glx_fbconfig_attr[] = {
-    GLX_GREEN_SIZE, 5,
-    GLX_GREEN_SIZE, 6,
-    GLX_BLUE_SIZE, 5,
-    None
-};
-
-static int tmu2_glx_init(MilkymistTMU2State *s)
+static int tmu2_gl_init(MilkymistTMU2State *s)
 {
-    GLXFBConfig *configs;
-    int nelements;
+    static struct qemu_gl_params params = {
+        .major_ver = 2,
+        .minor_ver = 0,
+    };
 
-    s->dpy = XOpenDisplay(NULL); /* FIXME: call XCloseDisplay() */
-    if (s->dpy == NULL) {
+    s->con = qemu_console_lookup_by_index(0);
+    if (!console_has_gl(s->con)) {
+        fprintf(stderr, "%s: ui lacks gl support\n", __func__);
         return 1;
     }
 
-    configs = glXChooseFBConfig(s->dpy, 0, glx_fbconfig_attr, &nelements);
-    if (configs == NULL) {
-        return 1;
-    }
-
-    s->glx_fb_config = *configs;
-    XFree(configs);
-
-    /* FIXME: call glXDestroyContext() */
-    s->glx_context = glXCreateNewContext(s->dpy, s->glx_fb_config,
-            GLX_RGBA_TYPE, NULL, 1);
-    if (s->glx_context == NULL) {
+    s->gl_context = dpy_gl_ctx_create(s->con, &params);
+    if (s->gl_context == NULL) {
+        fprintf(stderr, "%s: gl ctx create failed\n", __func__);
         return 1;
     }
 
@@ -175,16 +160,20 @@ static void tmu2_gl_map(struct vertex *mesh, int texhres, int texvres,
 
 static void tmu2_start(MilkymistTMU2State *s)
 {
-    int pbuffer_attrib[6] = {
-        GLX_PBUFFER_WIDTH,
+    int pbuffer_attrib[] = {
+        EGL_WIDTH,
         0,
-        GLX_PBUFFER_HEIGHT,
+        EGL_HEIGHT,
         0,
+#if 0 /* FIXME */
         GLX_PRESERVED_CONTENTS,
-        True
+        True,
+#endif
+        EGL_NONE
     };
 
-    GLXPbuffer pbuffer;
+    qemu_gl_context old;
+    EGLSurface pbuffer;
     GLuint texture;
     void *fb;
     hwaddr fb_len;
@@ -192,13 +181,26 @@ static void tmu2_start(MilkymistTMU2State *s)
     hwaddr mesh_len;
     float m;
 
+    if (!s->con) {
+        /*
+         * Delayed opengl init, can't do at device init
+         * time due to ui code being initialized later.
+         */
+        tmu2_gl_init(s);
+    }
+    if (!s->gl_context) {
+        return;
+    }
+
     trace_milkymist_tmu2_start();
 
     /* Create and set up a suitable OpenGL context */
     pbuffer_attrib[1] = s->regs[R_DSTHRES];
     pbuffer_attrib[3] = s->regs[R_DSTVRES];
-    pbuffer = glXCreatePbuffer(s->dpy, s->glx_fb_config, pbuffer_attrib);
-    glXMakeContextCurrent(s->dpy, pbuffer, pbuffer, s->glx_context);
+    pbuffer = eglCreatePbufferSurface(qemu_egl_display, qemu_egl_config,
+                                      pbuffer_attrib);
+    old = dpy_gl_ctx_get_current(s->con);
+    eglMakeCurrent(qemu_egl_display, pbuffer, pbuffer, s->gl_context);
 
     /* Fixup endianness. TODO: would it work on BE hosts? */
     glPixelStorei(GL_UNPACK_SWAP_BYTES, 1);
@@ -214,10 +216,7 @@ static void tmu2_start(MilkymistTMU2State *s)
     fb_len = 2*s->regs[R_TEXHRES]*s->regs[R_TEXVRES];
     fb = cpu_physical_memory_map(s->regs[R_TEXFBUF], &fb_len, 0);
     if (fb == NULL) {
-        glDeleteTextures(1, &texture);
-        glXMakeContextCurrent(s->dpy, None, None, NULL);
-        glXDestroyPbuffer(s->dpy, pbuffer);
-        return;
+        goto err;
     }
     glTexImage2D(GL_TEXTURE_2D, 0, 3, s->regs[R_TEXHRES], s->regs[R_TEXVRES],
             0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, fb);
@@ -258,10 +257,7 @@ static void tmu2_start(MilkymistTMU2State *s)
     fb_len = 2 * s->regs[R_DSTHRES] * s->regs[R_DSTVRES];
     fb = cpu_physical_memory_map(s->regs[R_DSTFBUF], &fb_len, 0);
     if (fb == NULL) {
-        glDeleteTextures(1, &texture);
-        glXMakeContextCurrent(s->dpy, None, None, NULL);
-        glXDestroyPbuffer(s->dpy, pbuffer);
-        return;
+        goto err;
     }
 
     glDrawPixels(s->regs[R_DSTHRES], s->regs[R_DSTVRES], GL_RGB,
@@ -277,10 +273,7 @@ static void tmu2_start(MilkymistTMU2State *s)
     mesh_len = MESH_MAXSIZE*MESH_MAXSIZE*sizeof(struct vertex);
     mesh = cpu_physical_memory_map(s->regs[R_VERTICESADDR], &mesh_len, 0);
     if (mesh == NULL) {
-        glDeleteTextures(1, &texture);
-        glXMakeContextCurrent(s->dpy, None, None, NULL);
-        glXDestroyPbuffer(s->dpy, pbuffer);
-        return;
+        goto err;
     }
 
     tmu2_gl_map((struct vertex *)mesh,
@@ -294,10 +287,7 @@ static void tmu2_start(MilkymistTMU2State *s)
     fb_len = 2 * s->regs[R_DSTHRES] * s->regs[R_DSTVRES];
     fb = cpu_physical_memory_map(s->regs[R_DSTFBUF], &fb_len, 1);
     if (fb == NULL) {
-        glDeleteTextures(1, &texture);
-        glXMakeContextCurrent(s->dpy, None, None, NULL);
-        glXDestroyPbuffer(s->dpy, pbuffer);
-        return;
+        goto err;
     }
 
     glReadPixels(0, 0, s->regs[R_DSTHRES], s->regs[R_DSTVRES], GL_RGB,
@@ -306,13 +296,20 @@ static void tmu2_start(MilkymistTMU2State *s)
 
     /* Free OpenGL allocs */
     glDeleteTextures(1, &texture);
-    glXMakeContextCurrent(s->dpy, None, None, NULL);
-    glXDestroyPbuffer(s->dpy, pbuffer);
+    dpy_gl_ctx_make_current(s->con, old);
+    eglDestroySurface(qemu_egl_display, pbuffer);
 
     s->regs[R_CTL] &= ~CTL_START_BUSY;
 
     trace_milkymist_tmu2_pulse_irq();
     qemu_irq_pulse(s->irq);
+    return;
+
+err:
+    glDeleteTextures(1, &texture);
+    dpy_gl_ctx_make_current(s->con, old);
+    eglDestroySurface(qemu_egl_display, pbuffer);
+    return;
 }
 
 static uint64_t tmu2_read(void *opaque, hwaddr addr,
@@ -445,10 +442,6 @@ static void milkymist_tmu2_reset(DeviceState *d)
 static int milkymist_tmu2_init(SysBusDevice *dev)
 {
     MilkymistTMU2State *s = MILKYMIST_TMU2(dev);
-
-    if (tmu2_glx_init(s)) {
-        return 1;
-    }
 
     sysbus_init_irq(dev, &s->irq);
 
