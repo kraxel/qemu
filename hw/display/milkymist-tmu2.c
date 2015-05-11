@@ -95,7 +95,7 @@ typedef struct MilkymistTMU2State MilkymistTMU2State;
 static int tmu2_gl_init(MilkymistTMU2State *s)
 {
     static struct qemu_gl_params params = {
-        .major_ver = 2,
+        .major_ver = 1,
         .minor_ver = 0,
     };
 
@@ -201,6 +201,9 @@ static void tmu2_start(MilkymistTMU2State *s)
                                       pbuffer_attrib);
     old = dpy_gl_ctx_get_current(s->con);
     eglMakeCurrent(qemu_egl_display, pbuffer, pbuffer, s->gl_context);
+
+    fprintf(stderr, "%s: desktop %d, version %d\n",
+            __func__, epoxy_is_desktop_gl(), epoxy_gl_version());
 
     /* Fixup endianness. TODO: would it work on BE hosts? */
     glPixelStorei(GL_UNPACK_SWAP_BYTES, 1);
