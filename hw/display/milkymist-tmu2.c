@@ -256,6 +256,7 @@ static void tmu2_start(MilkymistTMU2State *s)
     m = (float)(s->regs[R_BRIGHTNESS] + 1) / 64.0f;
     glColor4f(m, m, m, (float)(s->regs[R_ALPHA] + 1) / 64.0f);
 
+#if 0
     /* Read the QEMU dest. framebuffer into the OpenGL framebuffer */
     fb_len = 2 * s->regs[R_DSTHRES] * s->regs[R_DSTVRES];
     fb = cpu_physical_memory_map(s->regs[R_DSTFBUF], &fb_len, 0);
@@ -266,6 +267,8 @@ static void tmu2_start(MilkymistTMU2State *s)
     glDrawPixels(s->regs[R_DSTHRES], s->regs[R_DSTVRES], GL_RGB,
             GL_UNSIGNED_SHORT_5_6_5, fb);
     cpu_physical_memory_unmap(fb, fb_len, 0, fb_len);
+#endif
+
     glViewport(0, 0, s->regs[R_DSTHRES], s->regs[R_DSTVRES]);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
