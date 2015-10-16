@@ -400,6 +400,7 @@ int egl_init(void)
         goto err;
     }
     qemu_set_fd_handler(egl->listen_sock, egl_sock_accept, NULL, egl);
+    chmod(sockpath, 0777);
 
     for (idx = 0;; idx++) {
         con = qemu_console_lookup_by_index(idx);
