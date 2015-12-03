@@ -255,6 +255,10 @@ qemu-img$(EXESUF): qemu-img.o $(block-obj-y) $(crypto-obj-y) $(io-obj-y) $(qom-o
 qemu-nbd$(EXESUF): qemu-nbd.o $(block-obj-y) $(crypto-obj-y) $(io-obj-y) $(qom-obj-y) libqemuutil.a libqemustub.a
 qemu-io$(EXESUF): qemu-io.o $(block-obj-y) $(crypto-obj-y) $(io-obj-y) $(qom-obj-y) libqemuutil.a libqemustub.a
 
+qemu-eglview$(EXESUF): qemu-eglview.o ui/egl-helpers.o ui/shader.o ui/x_keymap.o
+qemu-eglview$(EXESUF): CFLAGS += $(GTK_CFLAGS) $(OPENGL_CFLAGS)
+qemu-eglview$(EXESUF): LIBS += $(GTK_LIBS) $(OPENGL_LIBS)
+
 qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o libqemuutil.a libqemustub.a
 
 fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/9p-marshal.o fsdev/9p-iov-marshal.o libqemuutil.a libqemustub.a
@@ -531,6 +535,11 @@ ui/shader/%-frag.h: $(SRC_PATH)/ui/shader/%.frag $(SRC_PATH)/scripts/shaderinclu
 
 ui/console-gl.o: $(SRC_PATH)/ui/console-gl.c \
 	ui/shader/texture-blit-vert.h ui/shader/texture-blit-frag.h
+
+qemu-eglview.o: $(SRC_PATH) qemu-eglview.c \
+	ui/shader/texture-blit-vert.h \
+	ui/shader/texture-blit-flip-vert.h \
+	ui/shader/texture-blit-oes-frag.h
 
 # documentation
 MAKEINFO=makeinfo

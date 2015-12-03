@@ -4578,6 +4578,9 @@ if test "$want_tools" = "yes" ; then
     tools="qemu-nbd\$(EXESUF) $tools"
     tools="ivshmem-client\$(EXESUF) ivshmem-server\$(EXESUF) $tools"
   fi
+  if [ "$opengl_dmabuf" = "yes" -a "$gtk" = "yes" -a "$gtkabi" = "3.0" ] ; then
+    tools="qemu-eglview\$(EXESUF) $tools"
+  fi
 fi
 if test "$softmmu" = yes ; then
   if test "$virtfs" != no ; then

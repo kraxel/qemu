@@ -2098,6 +2098,7 @@ typedef enum DisplayType {
     DT_SDL,
     DT_COCOA,
     DT_GTK,
+    DT_EGL,
     DT_NONE,
 } DisplayType;
 
@@ -2175,6 +2176,15 @@ static DisplayType select_display(const char *p)
             error_report("VNC requires a display argument vnc=<display>");
             exit(1);
         }
+    } else if (strstart(p, "egl", &opts)) {
+#ifdef CONFIG_OPENGL_DMABUF
+        request_opengl = 1;
+        display_opengl = 1;
+        display = DT_EGL;
+#else
+        fprintf(stderr, "egl support is disabled\n");
+        exit(1);
+#endif
     } else if (strstart(p, "curses", &opts)) {
 #ifdef CONFIG_CURSES
         display = DT_CURSES;
@@ -4605,6 +4615,14 @@ int main(int argc, char **argv, char **envp)
     if (using_spice) {
         qemu_spice_display_init();
     }
+
+#ifdef CONFIG_OPENGL_DMABUF
+    if (display_type == DT_EGL) {
+        if (egl_init() != 0) {
+            exit(1);
+        }
+    }
+#endif
 
     if (foreach_device_config(DEV_GDB, gdbserver_start) < 0) {
         exit(1);

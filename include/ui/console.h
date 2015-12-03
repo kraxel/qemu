@@ -519,4 +519,7 @@ static inline void early_gtk_display_init(int opengl)
 }
 #endif
 
+/* egl.c */
+int egl_init(void);
+
 #endif
