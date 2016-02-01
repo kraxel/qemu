@@ -33,8 +33,8 @@
 
 #include "qapi/qmp/qstring.h"
 
-#include "hw/xbox/nv2a_shaders_common.h"
-#include "hw/xbox/nv2a_psh.h"
+#include "nv2a_shaders_common.h"
+#include "nv2a_psh.h"
 
 /*
  * This implements translation of register combiners into glsl

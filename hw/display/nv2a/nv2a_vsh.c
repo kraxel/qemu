@@ -30,8 +30,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#include "hw/xbox/nv2a_shaders_common.h"
-#include "hw/xbox/nv2a_vsh.h"
+#include "nv2a_shaders_common.h"
+#include "nv2a_vsh.h"
 
 #define VSH_D3DSCM_CORRECTION 96
 

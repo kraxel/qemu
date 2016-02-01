@@ -19,9 +19,10 @@
  */
 
 #include "qemu-common.h"
-#include "hw/xbox/nv2a_debug.h"
-#include "hw/xbox/nv2a_shaders_common.h"
-#include "hw/xbox/nv2a_shaders.h"
+#include "ui/console.h"
+#include "nv2a_debug.h"
+#include "nv2a_shaders_common.h"
+#include "nv2a_shaders.h"
 
 static QString* generate_geometry_shader(
                                       enum ShaderPolygonMode polygon_front_mode,

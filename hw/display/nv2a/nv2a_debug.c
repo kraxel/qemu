@@ -18,7 +18,7 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "hw/xbox/nv2a_debug.h"
+#include "nv2a_debug.h"
 
 #ifdef DEBUG_NV2A_GL
 

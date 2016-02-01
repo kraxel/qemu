@@ -27,15 +27,13 @@
 #include "qemu/queue.h"
 #include "qemu/thread.h"
 #include "qapi/qmp/qstring.h"
-#include "gl/gloffscreen.h"
-#include "gl/glextensions.h"
 
-#include "hw/xbox/g-lru-cache.h"
-#include "hw/xbox/swizzle.h"
-#include "hw/xbox/nv2a_shaders.h"
-#include "hw/xbox/nv2a_debug.h"
+#include "g-lru-cache.h"
+#include "swizzle.h"
+#include "nv2a_shaders.h"
+#include "nv2a_debug.h"
 
-#include "hw/xbox/nv2a.h"
+#include "nv2a.h"
 
 #define USE_TEXTURE_CACHE
 

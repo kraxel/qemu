@@ -22,7 +22,6 @@
 #define HW_NV2A_SHADERS_H
 
 #include "qapi/qmp/qstring.h"
-#include "gl/gloffscreen.h"
 
 #include "nv2a_vsh.h"
 #include "nv2a_psh.h"
