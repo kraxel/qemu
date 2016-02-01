@@ -427,6 +427,12 @@ void surface_gl_destroy_texture(ConsoleGLState *gls,
 void surface_gl_setup_viewport(ConsoleGLState *gls,
                                DisplaySurface *surface,
                                int ww, int wh);
+
+/* Note that this is top-down, not bottom-up as glReadPixels would do. */
+void glo_readpixels(GLenum gl_format, GLenum gl_type,
+                    unsigned int bytes_per_pixel, unsigned int stride,
+                    unsigned int width, unsigned int height, void *data);
+
 #endif
 
 /* sdl.c */
