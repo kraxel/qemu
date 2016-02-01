@@ -6,3 +6,5 @@ common-obj-$(CONFIG_PCI) += g-lru-cache.o
 common-obj-$(CONFIG_PCI) += swizzle.o
 
 obj-$(CONFIG_PCI) += nv2a.o
+nv2a.o-cflags := -Wno-unused-variable
+nv2a.o-cflags += -Wno-unused-but-set-variable
