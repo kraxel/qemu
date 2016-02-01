@@ -1,7 +1,8 @@
-common-obj-$(CONFIG_PCI) += nv2a.o
 common-obj-$(CONFIG_PCI) += nv2a_debug.o
 common-obj-$(CONFIG_PCI) += nv2a_psh.o
 common-obj-$(CONFIG_PCI) += nv2a_shaders.o
 common-obj-$(CONFIG_PCI) += nv2a_vsh.o
 common-obj-$(CONFIG_PCI) += g-lru-cache.o
 common-obj-$(CONFIG_PCI) += swizzle.o
+
+obj-$(CONFIG_PCI) += nv2a.o
