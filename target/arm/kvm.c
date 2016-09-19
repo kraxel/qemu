@@ -528,6 +528,25 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
 
 MemTxAttrs kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
 {
+    ARMCPU *cpu;
+
+    if (kvm_irqchip_in_kernel()) {
+        /*
+         * We only need to sync timer states with user-space interrupt
+         * controllers, so return early and save cycles if we don't.
+         */
+        return MEMTXATTRS_UNSPECIFIED;
+    }
+
+    cpu = ARM_CPU(cs);
+
+    /* Synchronize our internal vtimer irq line with the kvm one */
+    if (run->s.regs.timer_irq_level != cpu->timer_irq_level) {
+        qemu_set_irq(ARM_CPU(cs)->gt_timer_outputs[GTIMER_VIRT],
+                     run->s.regs.timer_irq_level & KVM_ARM_TIMER_VTIMER);
+        cpu->timer_irq_level = run->s.regs.timer_irq_level;
+    }
+
     return MEMTXATTRS_UNSPECIFIED;
 }
 
