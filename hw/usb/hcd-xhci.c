@@ -2878,6 +2878,7 @@ static void xhci_port_write(void *ptr, hwaddr reg,
         break;
     case 0x04: /* PORTPMSC */
     case 0x08: /* PORTLI */
+        break;
     default:
         trace_usb_xhci_unimplemented("port write", reg);
     }
