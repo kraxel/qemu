@@ -775,10 +775,16 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
         break;
 
     case DeviceOutRequest | USB_REQ_SET_SEL:
+        if (dev->speed == USB_SPEED_SUPER) {
+            ret = 0;
+        }
+        trace_usb_set_sel(dev->port->path, ret);
+        break;
     case DeviceOutRequest | USB_REQ_SET_ISOCH_DELAY:
         if (dev->speed == USB_SPEED_SUPER) {
             ret = 0;
         }
+        trace_usb_set_isoch_delay(dev->port->path, ret);
         break;
 
     case InterfaceRequest | USB_REQ_GET_INTERFACE:
@@ -788,6 +794,7 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
         data[0] = dev->altsetting[index];
         p->actual_length = 1;
         ret = 0;
+        trace_usb_get_interface(dev->port->path, ret);
         break;
     case InterfaceOutRequest | USB_REQ_SET_INTERFACE:
         ret = usb_desc_set_interface(dev, index, value);
