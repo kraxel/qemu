@@ -1150,7 +1150,9 @@ static TRBCCode xhci_enable_ep(XHCIState *xhci, unsigned int slotid,
 
     epctx->mfindex_last = 0;
 
-    xhci_set_ep_state(xhci, epctx, NULL, EP_RUNNING);
+    epctx->state = EP_RUNNING;
+    ctx[0] &= ~EP_STATE_MASK;
+    ctx[0] |= EP_RUNNING;
 
     return CC_SUCCESS;
 }
