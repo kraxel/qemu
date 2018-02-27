@@ -228,7 +228,7 @@ static void usb_hub_attach(USBPort *port1)
     USBHubState *s = port1->opaque;
     USBHubPort *port = &s->ports[port1->index];
 
-    trace_usb_hub_attach(s->dev.addr, port1->index + 1);
+    trace_usb_hub_attach(s->dev.port->path, port1->index + 1);
     usb_hub_port_update(port);
     usb_wakeup(s->intr, 0);
 }
@@ -238,7 +238,7 @@ static void usb_hub_detach(USBPort *port1)
     USBHubState *s = port1->opaque;
     USBHubPort *port = &s->ports[port1->index];
 
-    trace_usb_hub_detach(s->dev.addr, port1->index + 1);
+    trace_usb_hub_detach(s->dev.port->path, port1->index + 1);
     usb_wakeup(s->intr, 0);
 
     /* Let upstream know the device on this port is gone */
@@ -311,7 +311,7 @@ static void usb_hub_handle_reset(USBDevice *dev)
     USBHubPort *port;
     int i;
 
-    trace_usb_hub_reset(s->dev.addr);
+    trace_usb_hub_reset(s->dev.port->path);
     for (i = 0; i < s->num_ports; i++) {
         port = s->ports + i;
         port->wPortStatus = 0;
@@ -352,7 +352,7 @@ static void usb_hub_handle_control(USBDevice *dev, USBPacket *p,
     USBHubState *s = (USBHubState *)dev;
     int ret;
 
-    trace_usb_hub_control(s->dev.addr, request, value, index, length);
+    trace_usb_hub_control(s->dev.port->path, request, value, index, length);
 
     ret = usb_desc_handle_control(dev, p, request, value, index, length, data);
     if (ret >= 0) {
@@ -381,7 +381,7 @@ static void usb_hub_handle_control(USBDevice *dev, USBPacket *p,
                 goto fail;
             }
             port = &s->ports[n];
-            trace_usb_hub_get_port_status(s->dev.addr, index,
+            trace_usb_hub_get_port_status(s->dev.port->path, index,
                                           port->wPortStatus,
                                           port->wPortChange);
             data[0] = port->wPortStatus;
@@ -403,7 +403,7 @@ static void usb_hub_handle_control(USBDevice *dev, USBPacket *p,
             USBHubPort *port;
             USBDevice *dev;
 
-            trace_usb_hub_set_port_feature(s->dev.addr, index,
+            trace_usb_hub_set_port_feature(s->dev.port->path, index,
                                            feature_name(value));
 
             if (n >= s->num_ports) {
@@ -441,7 +441,7 @@ static void usb_hub_handle_control(USBDevice *dev, USBPacket *p,
             unsigned int n = index - 1;
             USBHubPort *port;
 
-            trace_usb_hub_clear_port_feature(s->dev.addr, index,
+            trace_usb_hub_clear_port_feature(s->dev.port->path, index,
                                              feature_name(value));
 
             if (n >= s->num_ports) {
@@ -545,7 +545,7 @@ static void usb_hub_handle_data(USBDevice *dev, USBPacket *p)
                     status |= (1 << (i + 1));
             }
             if (status != 0) {
-                trace_usb_hub_status_report(s->dev.addr, status);
+                trace_usb_hub_status_report(s->dev.port->path, status);
                 for(i = 0; i < n; i++) {
                     buf[i] = status >> (8 * i);
                 }

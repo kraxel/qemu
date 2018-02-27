@@ -651,24 +651,24 @@ int usb_desc_get_descriptor(USBDevice *dev, USBPacket *p,
     switch(type) {
     case USB_DT_DEVICE:
         ret = usb_desc_device(&desc->id, dev->device, msos, buf, sizeof(buf));
-        trace_usb_desc_device(dev->addr, len, ret);
+        trace_usb_desc_device(dev->port->path, len, ret);
         break;
     case USB_DT_CONFIG:
         if (index < dev->device->bNumConfigurations) {
             ret = usb_desc_config(dev->device->confs + index, flags,
                                   buf, sizeof(buf));
         }
-        trace_usb_desc_config(dev->addr, index, len, ret);
+        trace_usb_desc_config(dev->port->path, index, len, ret);
         break;
     case USB_DT_STRING:
         ret = usb_desc_string(dev, index, buf, sizeof(buf));
-        trace_usb_desc_string(dev->addr, index, len, ret);
+        trace_usb_desc_string(dev->port->path, index, len, ret);
         break;
     case USB_DT_DEVICE_QUALIFIER:
         if (other_dev != NULL) {
             ret = usb_desc_device_qualifier(other_dev, buf, sizeof(buf));
         }
-        trace_usb_desc_device_qualifier(dev->addr, len, ret);
+        trace_usb_desc_device_qualifier(dev->port->path, len, ret);
         break;
     case USB_DT_OTHER_SPEED_CONFIG:
         if (other_dev != NULL && index < other_dev->bNumConfigurations) {
@@ -676,11 +676,11 @@ int usb_desc_get_descriptor(USBDevice *dev, USBPacket *p,
                                   buf, sizeof(buf));
             buf[0x01] = USB_DT_OTHER_SPEED_CONFIG;
         }
-        trace_usb_desc_other_speed_config(dev->addr, index, len, ret);
+        trace_usb_desc_other_speed_config(dev->port->path, index, len, ret);
         break;
     case USB_DT_BOS:
         ret = usb_desc_bos(desc, buf, sizeof(buf));
-        trace_usb_desc_bos(dev->addr, len, ret);
+        trace_usb_desc_bos(dev->port->path, len, ret);
         break;
 
     case USB_DT_DEBUG:
@@ -688,8 +688,8 @@ int usb_desc_get_descriptor(USBDevice *dev, USBPacket *p,
         break;
 
     default:
-        fprintf(stderr, "%s: %d unknown type %d (len %zd)\n", __func__,
-                dev->addr, type, len);
+        fprintf(stderr, "%s: port %s unknown type %d (len %zd)\n", __func__,
+                dev->port->path, type, len);
         break;
     }
 
@@ -715,7 +715,7 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
     switch(request) {
     case DeviceOutRequest | USB_REQ_SET_ADDRESS:
         dev->addr = value;
-        trace_usb_set_addr(dev->addr);
+        trace_usb_set_addr(dev->port->path, dev->addr);
         ret = 0;
         break;
 
@@ -734,7 +734,7 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
         break;
     case DeviceOutRequest | USB_REQ_SET_CONFIGURATION:
         ret = usb_desc_set_config(dev, value);
-        trace_usb_set_config(dev->addr, value, ret);
+        trace_usb_set_config(dev->port->path, value, ret);
         break;
 
     case DeviceRequest | USB_REQ_GET_STATUS: {
@@ -764,14 +764,14 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
             dev->remote_wakeup = 0;
             ret = 0;
         }
-        trace_usb_clear_device_feature(dev->addr, value, ret);
+        trace_usb_clear_device_feature(dev->port->path, value, ret);
         break;
     case DeviceOutRequest | USB_REQ_SET_FEATURE:
         if (value == USB_DEVICE_REMOTE_WAKEUP) {
             dev->remote_wakeup = 1;
             ret = 0;
         }
-        trace_usb_set_device_feature(dev->addr, value, ret);
+        trace_usb_set_device_feature(dev->port->path, value, ret);
         break;
 
     case DeviceOutRequest | USB_REQ_SET_SEL:
@@ -791,19 +791,19 @@ int usb_desc_handle_control(USBDevice *dev, USBPacket *p,
         break;
     case InterfaceOutRequest | USB_REQ_SET_INTERFACE:
         ret = usb_desc_set_interface(dev, index, value);
-        trace_usb_set_interface(dev->addr, index, value, ret);
+        trace_usb_set_interface(dev->port->path, index, value, ret);
         break;
 
     case VendorDeviceRequest | 'Q':
         if (msos) {
             ret = usb_desc_msos(desc, p, index, data, length);
-            trace_usb_desc_msos(dev->addr, index, length, ret);
+            trace_usb_desc_msos(dev->port->path, index, length, ret);
         }
         break;
     case VendorInterfaceRequest | 'Q':
         if (msos) {
             ret = usb_desc_msos(desc, p, index, data, length);
-            trace_usb_desc_msos(dev->addr, index, length, ret);
+            trace_usb_desc_msos(dev->port->path, index, length, ret);
         }
         break;
 

@@ -404,7 +404,7 @@ static void usb_uas_queue_response(UASDevice *uas, uint16_t tag, uint8_t code)
 {
     UASStatus *st = usb_uas_alloc_status(uas, UAS_UI_RESPONSE, tag);
 
-    trace_usb_uas_response(uas->dev.addr, tag, code);
+    trace_usb_uas_response(uas->dev.port->path, tag, code);
     st->status.response.response_code = code;
     usb_uas_queue_status(uas, st, sizeof(uas_iu_response));
 }
@@ -414,7 +414,7 @@ static void usb_uas_queue_sense(UASRequest *req, uint8_t status)
     UASStatus *st = usb_uas_alloc_status(req->uas, UAS_UI_SENSE, req->tag);
     int len, slen = 0;
 
-    trace_usb_uas_sense(req->uas->dev.addr, req->tag, status);
+    trace_usb_uas_sense(req->uas->dev.port->path, req->tag, status);
     st->status.sense.status = status;
     st->status.sense.status_qualifier = cpu_to_be16(0);
     if (status != GOOD) {
@@ -449,7 +449,7 @@ static void usb_uas_queue_read_ready(UASRequest *req)
     UASStatus *st = usb_uas_alloc_status(req->uas, UAS_UI_READ_READY,
                                          req->tag);
 
-    trace_usb_uas_read_ready(req->uas->dev.addr, req->tag);
+    trace_usb_uas_read_ready(req->uas->dev.port->path, req->tag);
     usb_uas_queue_status(req->uas, st, 0);
 }
 
@@ -458,7 +458,7 @@ static void usb_uas_queue_write_ready(UASRequest *req)
     UASStatus *st = usb_uas_alloc_status(req->uas, UAS_UI_WRITE_READY,
                                          req->tag);
 
-    trace_usb_uas_write_ready(req->uas->dev.addr, req->tag);
+    trace_usb_uas_write_ready(req->uas->dev.port->path, req->tag);
     usb_uas_queue_status(req->uas, st, 0);
 }
 
@@ -497,7 +497,7 @@ static void usb_uas_copy_data(UASRequest *req)
 
     length = MIN(req->buf_size - req->buf_off,
                  req->data->iov.size - req->data->actual_length);
-    trace_usb_uas_xfer_data(req->uas->dev.addr, req->tag, length,
+    trace_usb_uas_xfer_data(req->uas->dev.port->path, req->tag, length,
                             req->data->actual_length, req->data->iov.size,
                             req->buf_off, req->buf_size);
     usb_packet_copy(req->data, scsi_req_get_buf(req->req) + req->buf_off,
@@ -586,7 +586,7 @@ static void usb_uas_scsi_transfer_data(SCSIRequest *r, uint32_t len)
 {
     UASRequest *req = r->hba_private;
 
-    trace_usb_uas_scsi_data(req->uas->dev.addr, req->tag, len);
+    trace_usb_uas_scsi_data(req->uas->dev.port->path, req->tag, len);
     req->buf_off = 0;
     req->buf_size = len;
     if (req->data) {
@@ -601,7 +601,7 @@ static void usb_uas_scsi_command_complete(SCSIRequest *r,
 {
     UASRequest *req = r->hba_private;
 
-    trace_usb_uas_scsi_complete(req->uas->dev.addr, req->tag, status, resid);
+    trace_usb_uas_scsi_complete(req->uas->dev.port->path, req->tag, status, resid);
     req->complete = true;
     if (req->data) {
         usb_uas_complete_data_packet(req);
@@ -637,7 +637,7 @@ static void usb_uas_handle_reset(USBDevice *dev)
     UASRequest *req, *nreq;
     UASStatus *st, *nst;
 
-    trace_usb_uas_reset(dev->addr);
+    trace_usb_uas_reset(dev->port->path);
     QTAILQ_FOREACH_SAFE(req, &uas->requests, next, nreq) {
         scsi_req_cancel(req->req);
     }
@@ -711,7 +711,7 @@ static void usb_uas_command(UASDevice *uas, uas_iu *iu)
         goto bad_target;
     }
 
-    trace_usb_uas_command(uas->dev.addr, req->tag,
+    trace_usb_uas_command(uas->dev.port->path, req->tag,
                           usb_uas_get_lun(req->lun),
                           req->lun >> 32, req->lun & 0xffffffff);
     QTAILQ_INSERT_TAIL(&uas->requests, req, next);
@@ -770,7 +770,7 @@ static void usb_uas_task(UASDevice *uas, uas_iu *iu)
     switch (iu->task.function) {
     case UAS_TMF_ABORT_TASK:
         task_tag = be16_to_cpu(iu->task.task_tag);
-        trace_usb_uas_tmf_abort_task(uas->dev.addr, tag, task_tag);
+        trace_usb_uas_tmf_abort_task(uas->dev.port->path, tag, task_tag);
         req = usb_uas_find_request(uas, task_tag);
         if (req && req->dev == dev) {
             scsi_req_cancel(req->req);
@@ -779,13 +779,13 @@ static void usb_uas_task(UASDevice *uas, uas_iu *iu)
         break;
 
     case UAS_TMF_LOGICAL_UNIT_RESET:
-        trace_usb_uas_tmf_logical_unit_reset(uas->dev.addr, tag, lun);
+        trace_usb_uas_tmf_logical_unit_reset(uas->dev.port->path, tag, lun);
         qdev_reset_all(&dev->qdev);
         usb_uas_queue_response(uas, tag, UAS_RC_TMF_COMPLETE);
         break;
 
     default:
-        trace_usb_uas_tmf_unsupported(uas->dev.addr, tag, iu->task.function);
+        trace_usb_uas_tmf_unsupported(uas->dev.port->path, tag, iu->task.function);
         usb_uas_queue_response(uas, tag, UAS_RC_TMF_NOT_SUPPORTED);
         break;
     }
