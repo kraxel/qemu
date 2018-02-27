@@ -1132,7 +1132,6 @@ static TRBCCode xhci_enable_ep(XHCIState *xhci, unsigned int slotid,
     XHCISlot *slot;
     XHCIEPContext *epctx;
 
-    trace_usb_xhci_ep_enable(slotid, epid);
     assert(slotid >= 1 && slotid <= xhci->numslots);
     assert(epid >= 1 && epid <= 31);
 
@@ -1141,6 +1140,7 @@ static TRBCCode xhci_enable_ep(XHCIState *xhci, unsigned int slotid,
         xhci_disable_ep(xhci, slotid, epid);
     }
 
+    trace_usb_xhci_ep_enable(slotid, epid);
     epctx = xhci_alloc_epctx(xhci, slotid, epid);
     slot->eps[epid-1] = epctx;
     xhci_init_epctx(epctx, pctx, ctx);
@@ -1150,9 +1150,7 @@ static TRBCCode xhci_enable_ep(XHCIState *xhci, unsigned int slotid,
 
     epctx->mfindex_last = 0;
 
-    epctx->state = EP_RUNNING;
-    ctx[0] &= ~EP_STATE_MASK;
-    ctx[0] |= EP_RUNNING;
+    xhci_set_ep_state(xhci, epctx, NULL, EP_RUNNING);
 
     return CC_SUCCESS;
 }
