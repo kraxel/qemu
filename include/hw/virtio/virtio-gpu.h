@@ -33,6 +33,12 @@
 
 #define VIRTIO_ID_GPU 16
 
+typedef enum virtio_gpu_resource_type {
+    VIRTIO_GPU_RES_TYPE_DEFAULT = 0,
+    VIRTIO_GPU_RES_TYPE_NO_TRANSFER,
+    VIRTIO_GPU_RES_TYPE_HOST_COHERENT,
+} virtio_gpu_resource_type;
+
 struct virtio_gpu_simple_resource {
     Object obj;
     uint32_t resource_id;
@@ -47,8 +53,12 @@ struct virtio_gpu_simple_resource {
     uint32_t scanout_bitmask;
     pixman_image_t *image;
     void *imagedata;
+    uint64_t size;
     uint64_t hostmem;
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
+    virtio_gpu_resource_type type;
+    QemuDmaBuf *dmabuf;
+    MemoryRegion mr;
 };
 
 struct virtio_gpu_scanout {
@@ -71,6 +81,7 @@ enum virtio_gpu_conf_flags {
     VIRTIO_GPU_FLAG_VIRGL_ENABLED = 1,
     VIRTIO_GPU_FLAG_STATS_ENABLED,
     VIRTIO_GPU_FLAG_EDID_ENABLED,
+    VIRTIO_GPU_FLAG_NO_TRANSFER_ENABLED,
 };
 
 #define virtio_gpu_virgl_enabled(_cfg) \
@@ -79,8 +90,11 @@ enum virtio_gpu_conf_flags {
     (_cfg.flags & (1 << VIRTIO_GPU_FLAG_STATS_ENABLED))
 #define virtio_gpu_edid_enabled(_cfg) \
     (_cfg.flags & (1 << VIRTIO_GPU_FLAG_EDID_ENABLED))
+#define virtio_gpu_no_transfer_enabled(_cfg) \
+    (_cfg.flags & (1 << VIRTIO_GPU_FLAG_NO_TRANSFER_ENABLED))
 
 struct virtio_gpu_conf {
+    uint64_t coherent;
     uint64_t max_hostmem;
     uint32_t max_outputs;
     uint32_t flags;
@@ -106,6 +120,10 @@ typedef struct VirtIOGPU {
     VirtQueue *cursor_vq;
 
     int enable;
+
+//    int config_size;
+//    DeviceState *qdev;
+    MemoryRegion coherent;
 
     QTAILQ_HEAD(, virtio_gpu_simple_resource) reslist;
     QTAILQ_HEAD(, virtio_gpu_ctrl_command) cmdq;
@@ -176,6 +194,11 @@ int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
 void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
                                     struct iovec *iov, uint32_t count);
 void virtio_gpu_process_cmdq(VirtIOGPU *g);
+
+/* virtio-gpu-udmabuf.c */
+bool virtio_gpu_have_udmabuf(void);
+int virtio_gpu_init_udmabuf(struct virtio_gpu_simple_resource *res);
+void virtio_gpu_fini_udmabuf(struct virtio_gpu_simple_resource *res);
 
 /* virtio-gpu-3d.c */
 void virtio_gpu_virgl_process_cmd(VirtIOGPU *g,

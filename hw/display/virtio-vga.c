@@ -130,7 +130,19 @@ static void virtio_vga_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
      * the stdvga mmio registers at the start of bar #2.
      */
     vpci_dev->modern_mem_bar_idx = 2;
-    vpci_dev->msix_bar_idx = 4;
+    if (g->conf.coherent) {
+        fprintf(stderr, "%s: coherent enabled\n", __func__);
+        vpci_dev->msix_bar_idx = 1;
+        memory_region_init(&g->coherent, OBJECT(vvga), "virtio-vga-coherent",
+                           g->conf.coherent);
+        pci_register_bar(&vpci_dev->pci_dev, 4,
+                         PCI_BASE_ADDRESS_SPACE_MEMORY |
+                         PCI_BASE_ADDRESS_MEM_PREFETCH |
+                         PCI_BASE_ADDRESS_MEM_TYPE_64,
+                         &g->coherent);
+    } else {
+        vpci_dev->msix_bar_idx = 4;
+    }
 
     if (!(vpci_dev->flags & VIRTIO_PCI_FLAG_PAGE_PER_VQ)) {
         /*

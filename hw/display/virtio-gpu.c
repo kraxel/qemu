@@ -76,6 +76,14 @@ virtio_gpu_t2d_bswap(struct virtio_gpu_transfer_to_host_2d *t2d)
     le32_to_cpus(&t2d->padding);
 }
 
+static void
+virtio_gpu_map_bswap(struct virtio_gpu_cmd_resource_map *map)
+{
+    virtio_gpu_ctrl_hdr_bswap(&map->hdr);
+    le32_to_cpus(&map->resource_id);
+    le64_to_cpus(&map->offset);
+}
+
 #ifdef CONFIG_VIRGL
 #include <virglrenderer.h>
 #define VIRGL(_g, _virgl, _simple, ...)                     \
@@ -210,6 +218,14 @@ static uint64_t virtio_gpu_get_features(VirtIODevice *vdev, uint64_t features,
     }
     if (virtio_gpu_edid_enabled(g->conf)) {
         features |= (1 << VIRTIO_GPU_F_EDID);
+    }
+    if (virtio_gpu_no_transfer_enabled(g->conf)) {
+        features |= (1 << VIRTIO_GPU_F_RES_V2);
+        features |= (1 << VIRTIO_GPU_F_RES_NO_TRANSFER);
+    }
+    if (g->conf.coherent) {
+        features |= (1 << VIRTIO_GPU_F_RES_V2);
+        features |= (1 << VIRTIO_GPU_F_RES_HOST_COHERENT);
     }
     return features;
 }
@@ -419,12 +435,12 @@ static void virtio_gpu_resource_create_pixman(VirtIOGPU *g,
                                               struct virtio_gpu_simple_resource *res)
 {
     res->stride = calc_image_stride(res->pformat, res->width);
-    res->hostmem = QEMU_ALIGN_UP(res->stride * res->height, getpagesize());
-    if (res->hostmem + g->hostmem >= g->conf.max_hostmem) {
+    res->size = QEMU_ALIGN_UP(res->stride * res->height, getpagesize());
+    if (res->size + g->hostmem >= g->conf.max_hostmem) {
         return;
     }
 
-    res->imagedata = qemu_try_memalign(getpagesize(), res->hostmem);
+    res->imagedata = qemu_try_memalign(getpagesize(), res->size);
     if (!res->imagedata) {
         return;
     }
@@ -439,59 +455,192 @@ static void virtio_gpu_resource_create_pixman(VirtIOGPU *g,
         (res->image, virtio_gpu_pixman_unref_resource, res);
 }
 
+static struct virtio_gpu_simple_resource*
+virtio_gpu_resource_create(VirtIOGPU *g,
+                           struct virtio_gpu_ctrl_command *cmd,
+                           struct virtio_gpu_cmd_resource_create_v2 *create)
+{
+    struct virtio_gpu_simple_resource *res;
+    char *name;
+
+    if (create->resource_id == 0) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource id 0 is not allowed\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return NULL;
+    }
+
+    res = virtio_gpu_find_resource(g, create->resource_id);
+    if (res) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already exists %d\n",
+                      __func__, create->resource_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return NULL;
+    }
+
+    res = virtio_gpu_alloc_resource(g, create->resource_id);
+
+    res->width = create->width;
+    res->height = create->height;
+    res->format = create->format;
+    if (create->alloc_flags & VIRTIO_GPU_RESOURCE_ALLOC_NO_TRANSFER) {
+        if (virtio_gpu_no_transfer_enabled(g->conf)) {
+            res->type = VIRTIO_GPU_RES_TYPE_NO_TRANSFER;
+        } else {
+            fprintf(stderr, "no-transfer is disabled\n");
+            virtio_gpu_free_resource(g, res);
+            cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+            return NULL;
+        }
+    }
+    if (create->alloc_flags & VIRTIO_GPU_RESOURCE_ALLOC_HOST_COHERENT) {
+        if (g->conf.coherent) {
+            res->type = VIRTIO_GPU_RES_TYPE_HOST_COHERENT;
+        } else {
+            fprintf(stderr, "host-coherent is disabled\n");
+            virtio_gpu_free_resource(g, res);
+            cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+            return NULL;
+        }
+    }
+
+    res->pformat = get_pixman_format(create->format);
+    if (!res->pformat) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: host couldn't handle guest format %d\n",
+                      __func__, create->format);
+        virtio_gpu_free_resource(g, res);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return NULL;
+    }
+
+    switch (res->type) {
+    case VIRTIO_GPU_RES_TYPE_DEFAULT:
+        /*
+         * Traditional resources.  Both guest and host allocate,
+         * TRANSFER commands will copy between host and guest.
+         */
+        fprintf(stderr, "%s: res %d, default\n", __func__,
+                res->resource_id);
+        virtio_gpu_resource_create_pixman(g, res);
+        if (!res->image) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: resource creation failed %d %dx%d\n",
+                          __func__, create->resource_id,
+                          create->width, create->height);
+            virtio_gpu_free_resource(g, res);
+            cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
+            return NULL;
+        }
+        res->hostmem = res->size;
+        break;
+    case VIRTIO_GPU_RES_TYPE_NO_TRANSFER:
+        /*
+         * Guest allocated shared resource.  Host maps it using
+         * udmabuf (see virtio_gpu_resource_attach_backing).
+         */
+        fprintf(stderr, "%s: res %d, no-transfer\n", __func__,
+                res->resource_id);
+        res->stride = calc_image_stride(res->pformat, res->width);
+        res->size = QEMU_ALIGN_UP(res->stride * res->height, getpagesize());
+        break;
+    case VIRTIO_GPU_RES_TYPE_HOST_COHERENT:
+        /*
+         * Host allocated shared resource.  Guest can ask the host to
+         * map it into the pci bar.
+         */
+        fprintf(stderr, "%s: res %d, host-coherent\n", __func__,
+                res->resource_id);
+        virtio_gpu_resource_create_pixman(g, res);
+        if (!res->image) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: resource creation failed %d %dx%d\n",
+                          __func__, create->resource_id,
+                          create->width, create->height);
+            virtio_gpu_free_resource(g, res);
+            cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
+            return NULL;
+        }
+
+        name = g_strdup_printf("resource-%d", create->resource_id);
+        memory_region_init_ram_ptr(&res->mr, OBJECT(res), name, res->size,
+                                   pixman_image_get_data(res->image));
+        memory_region_set_enabled(&res->mr, false);
+        memory_region_add_subregion(&g->coherent, 0, &res->mr);
+        g_free(name);
+
+        res->hostmem = res->size;
+        break;
+    }
+
+    g->hostmem += res->hostmem;
+    return res;
+}
+
 static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
                                           struct virtio_gpu_ctrl_command *cmd)
 {
-    struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_resource_create_2d c2d;
+    struct virtio_gpu_cmd_resource_create_v2 create;
 
     VIRTIO_GPU_FILL_CMD(c2d);
     virtio_gpu_bswap_32(&c2d, sizeof(c2d));
     trace_virtio_gpu_cmd_res_create_2d(c2d.resource_id, c2d.format,
                                        c2d.width, c2d.height);
 
-    if (c2d.resource_id == 0) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource id 0 is not allowed\n",
-                      __func__);
+    memset(&create, 0, sizeof(create));
+    create.resource_id = c2d.resource_id;
+    create.width = c2d.width;
+    create.height = c2d.height;
+    create.format = c2d.format;
+
+    virtio_gpu_resource_create(g, cmd, &create);
+}
+
+static void virtio_gpu_resource_create_v2(VirtIOGPU *g,
+                                          struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_simple_resource *res;
+    struct virtio_gpu_cmd_resource_create_v2 create;
+    struct virtio_gpu_resp_resource_info info;
+
+    VIRTIO_GPU_FILL_CMD(create);
+    virtio_gpu_bswap_32(&create, sizeof(create));
+    trace_virtio_gpu_cmd_res_create_v2(create.resource_id, create.format,
+                                       create.width, create.height);
+
+    res = virtio_gpu_resource_create(g, cmd, &create);
+    if (!res) {
+        fprintf(stderr, "%s: err\n", __func__);
+        return;
+    }
+
+    memset(&info, 0, sizeof(info));
+    info.stride[0] = cpu_to_le32(res->stride);
+    info.size = cpu_to_le64(res->size);
+    virtio_gpu_ctrl_response(g, cmd, &info.hdr, sizeof(info));
+}
+
+static void virtio_gpu_resource_map(VirtIOGPU *g,
+                                    struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_simple_resource *res;
+    struct virtio_gpu_cmd_resource_map map;
+
+    VIRTIO_GPU_FILL_CMD(map);
+    virtio_gpu_map_bswap(&map);
+    trace_virtio_gpu_cmd_res_map(map.resource_id, map.offset);
+
+    res = virtio_gpu_find_resource(g, map.resource_id);
+    if (!res) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
+                      __func__, map.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
         return;
     }
 
-    res = virtio_gpu_find_resource(g, c2d.resource_id);
-    if (res) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already exists %d\n",
-                      __func__, c2d.resource_id);
-        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
-        return;
-    }
-
-    res = virtio_gpu_alloc_resource(g, c2d.resource_id);
-
-    res->width = c2d.width;
-    res->height = c2d.height;
-    res->format = c2d.format;
-
-    res->pformat = get_pixman_format(c2d.format);
-    if (!res->pformat) {
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: host couldn't handle guest format %d\n",
-                      __func__, c2d.format);
-        virtio_gpu_free_resource(g, res);
-        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
-        return;
-    }
-
-    virtio_gpu_resource_create_pixman(g, res);
-    if (!res->image) {
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: resource creation failed %d %d %d\n",
-                      __func__, c2d.resource_id, c2d.width, c2d.height);
-        virtio_gpu_free_resource(g, res);
-        cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
-        return;
-    }
-
-    g->hostmem += res->hostmem;
+    memory_region_set_address(&res->mr, map.offset);
+    memory_region_set_enabled(&res->mr, true);
 }
 
 static void virtio_gpu_disable_scanout(VirtIOGPU *g, int scanout_id)
@@ -536,6 +685,9 @@ static void virtio_gpu_resource_destroy(VirtIOGPU *g,
     }
 
     pixman_image_unref(res->image);
+    if (res->type == VIRTIO_GPU_RES_TYPE_HOST_COHERENT) {
+        memory_region_del_subregion(&g->coherent, &res->mr);
+    }
     virtio_gpu_cleanup_mapping(g, res);
     g->hostmem -= res->hostmem;
     virtio_gpu_free_resource(g, res);
@@ -583,6 +735,10 @@ static void virtio_gpu_transfer_to_host_2d(VirtIOGPU *g,
         return;
     }
 
+    if (res->type == VIRTIO_GPU_RES_TYPE_NO_TRANSFER) {
+        return;
+    }
+
     if (t2d.r.x > res->width ||
         t2d.r.y > res->height ||
         t2d.r.width > res->width ||
@@ -617,6 +773,11 @@ static void virtio_gpu_transfer_to_host_2d(VirtIOGPU *g,
                    pixman_image_get_data(res->image),
                    pixman_image_get_stride(res->image)
                    * pixman_image_get_height(res->image));
+    }
+    if (res->type == VIRTIO_GPU_RES_TYPE_HOST_COHERENT) {
+        /* allow for now, but log */
+        fprintf(stderr, "%s: res %d, is type coherent\n",
+                __func__, res->resource_id);
     }
 }
 
@@ -721,7 +882,7 @@ static void virtio_gpu_set_scanout(VirtIOGPU *g,
 
     /* create a surface for this scanout */
     res = virtio_gpu_find_resource(g, ss.resource_id);
-    if (!res) {
+    if (!res || !res->image) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
                       __func__, ss.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
@@ -858,6 +1019,7 @@ void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
 static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
                                        struct virtio_gpu_simple_resource *res)
 {
+    virtio_gpu_fini_udmabuf(res);
     virtio_gpu_cleanup_mapping_iov(g, res->iov, res->iov_cnt);
     res->iov = NULL;
     res->iov_cnt = 0;
@@ -897,6 +1059,16 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
     }
 
     res->iov_cnt = ab.nr_entries;
+
+    if (res->type == VIRTIO_GPU_RES_TYPE_NO_TRANSFER) {
+        res->stride = calc_image_stride(res->pformat, res->width);
+        ret = virtio_gpu_init_udmabuf(res);
+        if (ret != 0) {
+            virtio_gpu_cleanup_mapping(g, res);
+            cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+            return;
+        }
+    }
 }
 
 static void
@@ -953,6 +1125,12 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         break;
     case VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING:
         virtio_gpu_resource_detach_backing(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_RESOURCE_CREATE_V2:
+        virtio_gpu_resource_create_v2(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_RESOURCE_MAP:
+        virtio_gpu_resource_map(g, cmd);
         break;
     default:
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
@@ -1328,6 +1506,10 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
         return;
     }
 
+    if (g->conf.coherent) {
+        fprintf(stderr, "%s: coherent enabled\n", __func__);
+    }
+
     g->use_virgl_renderer = false;
 #if !defined(CONFIG_VIRGL) || defined(HOST_WORDS_BIGENDIAN)
     have_virgl = false;
@@ -1340,6 +1522,28 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
 
     if (virtio_gpu_virgl_enabled(g->conf)) {
         error_setg(&g->migration_blocker, "virgl is not yet migratable");
+        migrate_add_blocker(g->migration_blocker, &local_err);
+        if (local_err) {
+            error_propagate(errp, local_err);
+            error_free(g->migration_blocker);
+            return;
+        }
+    }
+
+    if (virtio_gpu_no_transfer_enabled(g->conf)) {
+        if (!virtio_gpu_have_udmabuf()) {
+            error_setg(errp, "no-transfer not supported by host (requires udmabuf)");
+            return;
+        }
+
+        /* FIXME: to be investigated ... */
+        if (virtio_gpu_virgl_enabled(g->conf)) {
+            error_setg(errp, "no-transfer and virgl are not compatible (yet)");
+            return;
+        }
+
+        /* FIXME: must xfer zerocopy resource flag somehow */
+        error_setg(&g->migration_blocker, "no-transfer is not migratable (yet)");
         migrate_add_blocker(g->migration_blocker, &local_err);
         if (local_err) {
             error_propagate(errp, local_err);
@@ -1484,6 +1688,9 @@ static Property virtio_gpu_properties[] = {
 #endif
     DEFINE_PROP_BIT("edid", VirtIOGPU, conf.flags,
                     VIRTIO_GPU_FLAG_EDID_ENABLED, false),
+    DEFINE_PROP_BIT("no-transfer", VirtIOGPU, conf.flags,
+                    VIRTIO_GPU_FLAG_NO_TRANSFER_ENABLED, false),
+    DEFINE_PROP_SIZE("host-coherent", VirtIOGPU, conf.coherent, 0),
     DEFINE_PROP_UINT32("xres", VirtIOGPU, conf.xres, 1024),
     DEFINE_PROP_UINT32("yres", VirtIOGPU, conf.yres, 768),
     DEFINE_PROP_END_OF_LIST(),
