@@ -211,6 +211,9 @@ static uint64_t virtio_gpu_get_features(VirtIODevice *vdev, uint64_t features,
     if (virtio_gpu_edid_enabled(g->conf)) {
         features |= (1 << VIRTIO_GPU_F_EDID);
     }
+    if (virtio_gpu_zerocopy_enabled(g->conf)) {
+        features |= (1 << VIRTIO_GPU_F_ZEROCOPY);
+    }
     return features;
 }
 
@@ -409,6 +412,9 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     res->height = c2d.height;
     res->format = c2d.format;
     res->resource_id = c2d.resource_id;
+    if (c2d.hdr.flags & VIRTIO_GPU_FLAG_ZEROCOPY) {
+        res->type = VIRTIO_GPU_RES_TYPE_ZEROCOPY;
+    }
 
     pformat = virtio_gpu_get_pixman_format(c2d.format);
     if (!pformat) {
@@ -419,14 +425,21 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
         return;
     }
-
     res->stride = calc_image_stride(pformat, res->width);
-    res->hostmem = res->stride * res->height;
-    if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
-        res->image = pixman_image_create_bits(pformat,
-                                              c2d.width,
-                                              c2d.height,
-                                              NULL, 0);
+
+    if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
+        pixman_color_t red = {
+            .red = 0xffff /* visual debugging ;) */
+        };
+        res->image = pixman_image_create_solid_fill(&red);
+    } else {
+        res->hostmem = res->stride * res->height;
+        if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
+            res->image = pixman_image_create_bits(pformat,
+                                                  c2d.width,
+                                                  c2d.height,
+                                                  NULL, 0);
+        }
     }
 
     if (!res->image) {
@@ -529,6 +542,10 @@ static void virtio_gpu_transfer_to_host_2d(VirtIOGPU *g,
         qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
                       __func__, t2d.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return;
+    }
+
+    if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
         return;
     }
 
@@ -812,6 +829,9 @@ static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
     res->iov_cnt = 0;
     g_free(res->addrs);
     res->addrs = NULL;
+    if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
+        virtio_gpu_fini_zerocopy(res);
+    }
 }
 
 static void
@@ -846,6 +866,10 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
     }
 
     res->iov_cnt = ab.nr_entries;
+
+    if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
+        virtio_gpu_init_zerocopy(res);
+    }
 }
 
 static void
@@ -1303,6 +1327,28 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
         }
     }
 
+    if (virtio_gpu_zerocopy_enabled(g->conf)) {
+        if (!virtio_gpu_have_zerocopy()) {
+            error_setg(errp, "zerocopy not supported by host (requires udmabuf)");
+            return;
+        }
+
+        /* FIXME: to be investigated ... */
+        if (virtio_gpu_virgl_enabled(g->conf)) {
+            error_setg(errp, "zerocopy and virgl are not compatible (yet)");
+            return;
+        }
+
+        /* FIXME: must xfer zerocopy resource flag somehow */
+        error_setg(&g->migration_blocker, "zerocopy is not migratable (yet)");
+        migrate_add_blocker(g->migration_blocker, &local_err);
+        if (local_err) {
+            error_propagate(errp, local_err);
+            error_free(g->migration_blocker);
+            return;
+        }
+    }
+
     g->virtio_config.num_scanouts = cpu_to_le32(g->conf.max_outputs);
     virtio_init(VIRTIO_DEVICE(g), "virtio-gpu", VIRTIO_ID_GPU,
                 sizeof(struct virtio_gpu_config));
@@ -1439,6 +1485,8 @@ static Property virtio_gpu_properties[] = {
 #endif
     DEFINE_PROP_BIT("edid", VirtIOGPU, conf.flags,
                     VIRTIO_GPU_FLAG_EDID_ENABLED, false),
+    DEFINE_PROP_BIT("zerocopy", VirtIOGPU, conf.flags,
+                    VIRTIO_GPU_FLAG_ZEROCOPY_ENABLED, false),
     DEFINE_PROP_UINT32("xres", VirtIOGPU, conf.xres, 1024),
     DEFINE_PROP_UINT32("yres", VirtIOGPU, conf.yres, 768),
     DEFINE_PROP_END_OF_LIST(),
