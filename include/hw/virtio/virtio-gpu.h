@@ -30,7 +30,8 @@
 
 typedef enum virtio_gpu_resource_type {
     VIRTIO_GPU_RES_TYPE_DEFAULT = 0,
-    VIRTIO_GPU_RES_TYPE_ZEROCOPY
+    VIRTIO_GPU_RES_TYPE_ZEROCOPY,
+    VIRTIO_GPU_RES_TYPE_COHERENT
 } virtio_gpu_resource_type;
 
 struct virtio_gpu_simple_resource {
@@ -48,8 +49,8 @@ struct virtio_gpu_simple_resource {
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
     virtio_gpu_resource_type type;
     QemuDmaBuf *dmabuf;
-    size_t remapsz;
-    uint8_t *remapped;
+    size_t mapsz;
+    uint8_t *mapptr;
 };
 
 struct virtio_gpu_scanout {
@@ -85,6 +86,7 @@ enum virtio_gpu_conf_flags {
     (_cfg.flags & (1 << VIRTIO_GPU_FLAG_ZEROCOPY_ENABLED))
 
 struct virtio_gpu_conf {
+    uint64_t coherent;
     uint64_t max_hostmem;
     uint32_t max_outputs;
     uint32_t flags;
@@ -110,6 +112,8 @@ typedef struct VirtIOGPU {
     VirtQueue *cursor_vq;
 
     int enable;
+
+    MemoryRegion coherent;
 
     QTAILQ_HEAD(, virtio_gpu_simple_resource) reslist;
     QTAILQ_HEAD(, virtio_gpu_ctrl_command) cmdq;

@@ -85,23 +85,23 @@ static QemuDmaBuf *virtio_gpu_create_udmabuf(struct virtio_gpu_simple_resource *
 
 static void virtio_gpu_remap_udmabuf(struct virtio_gpu_simple_resource *res)
 {
-    res->remapsz = QEMU_ALIGN_UP(res->dmabuf->stride *
-                                 res->dmabuf->height,
-                                 getpagesize());
-    res->remapped = mmap(NULL, res->remapsz, PROT_READ,
-                         MAP_SHARED, res->dmabuf->fd, 0);
-    if (res->remapped == MAP_FAILED) {
+    res->mapsz = QEMU_ALIGN_UP(res->dmabuf->stride *
+                               res->dmabuf->height,
+                               getpagesize());
+    res->mapptr = mmap(NULL, res->mapsz, PROT_READ,
+                       MAP_SHARED, res->dmabuf->fd, 0);
+    if (res->mapptr == MAP_FAILED) {
         warn_report("%s: dmabuf mmap failed: %s", __func__,
                     strerror(errno));
-        res->remapped = NULL;
+        res->mapptr = NULL;
     }
 }
 
 static void virtio_gpu_destroy_udmabuf(struct virtio_gpu_simple_resource *res)
 {
-    if (res->remapped) {
-        munmap(res->remapped, res->remapsz);
-        res->remapped = NULL;
+    if (res->mapptr) {
+        munmap(res->mapptr, res->mapsz);
+        res->mapptr = NULL;
     }
     close(res->dmabuf->fd);
     free(res->dmabuf);
@@ -139,10 +139,10 @@ void virtio_gpu_init_zerocopy(struct virtio_gpu_simple_resource *res)
             return;
         }
         virtio_gpu_remap_udmabuf(res);
-        if (!res->remapped) {
+        if (!res->mapptr) {
             return;
         }
-        pdata = res->remapped;
+        pdata = res->mapptr;
     }
 
     pixman_image_unref(res->image);

@@ -76,6 +76,15 @@ virtio_gpu_t2d_bswap(struct virtio_gpu_transfer_to_host_2d *t2d)
     le32_to_cpus(&t2d->padding);
 }
 
+static void
+virtio_gpu_map_bswap(struct virtio_gpu_resource_map_coherent *map)
+{
+    virtio_gpu_ctrl_hdr_bswap(&map->hdr);
+    le32_to_cpus(&map->resource_id);
+    le32_to_cpus(&map->size);
+    le64_to_cpus(&map->offset);
+}
+
 #ifdef CONFIG_VIRGL
 #include <virglrenderer.h>
 #define VIRGL(_g, _virgl, _simple, ...)                     \
@@ -213,6 +222,9 @@ static uint64_t virtio_gpu_get_features(VirtIODevice *vdev, uint64_t features,
     }
     if (virtio_gpu_zerocopy_enabled(g->conf)) {
         features |= (1 << VIRTIO_GPU_F_ZEROCOPY);
+    }
+    if (g->conf.coherent) {
+        features |= (1 << VIRTIO_GPU_F_COHERENT);
     }
     return features;
 }
@@ -415,6 +427,9 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     if (c2d.hdr.flags & VIRTIO_GPU_FLAG_ZEROCOPY) {
         res->type = VIRTIO_GPU_RES_TYPE_ZEROCOPY;
     }
+    if (c2d.hdr.flags & VIRTIO_GPU_FLAG_COHERENT) {
+        res->type = VIRTIO_GPU_RES_TYPE_COHERENT;
+    }
 
     pformat = virtio_gpu_get_pixman_format(c2d.format);
     if (!pformat) {
@@ -427,12 +442,16 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     }
     res->stride = calc_image_stride(pformat, res->width);
 
-    if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
-        pixman_color_t red = {
+    switch (res->type) {
+    case VIRTIO_GPU_RES_TYPE_ZEROCOPY:
+    {
+        static const pixman_color_t red = {
             .red = 0xffff /* visual debugging ;) */
         };
         res->image = pixman_image_create_solid_fill(&red);
-    } else {
+        break;
+    }
+    case VIRTIO_GPU_RES_TYPE_DEFAULT:
         res->hostmem = res->stride * res->height;
         if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
             res->image = pixman_image_create_bits(pformat,
@@ -440,6 +459,18 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
                                                   c2d.height,
                                                   NULL, 0);
         }
+        break;
+    case VIRTIO_GPU_RES_TYPE_COHERENT:
+        res->hostmem = QEMU_ALIGN_UP(res->stride * res->height, 4 * KiB);
+        fprintf(stderr, "%s: res %d, coherent, %dx%d, size 0x%" PRIx64 "\n",
+                __func__, res->resource_id, res->width, res->height, res->hostmem);
+        if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
+            res->image = pixman_image_create_bits(pformat,
+                                                  c2d.width,
+                                                  c2d.height,
+                                                  NULL, 0);
+        }
+        break;
     }
 
     if (!res->image) {
@@ -870,6 +901,11 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
     if (res->type == VIRTIO_GPU_RES_TYPE_ZEROCOPY) {
         virtio_gpu_init_zerocopy(res);
     }
+    if (res->type == VIRTIO_GPU_RES_TYPE_COHERENT) {
+        /* allow for now, but log */
+        fprintf(stderr, "%s: res %d, is type coherent\n",
+                __func__, res->resource_id);
+    }
 }
 
 static void
@@ -891,6 +927,41 @@ virtio_gpu_resource_detach_backing(VirtIOGPU *g,
         return;
     }
     virtio_gpu_cleanup_mapping(g, res);
+}
+
+static void
+virtio_gpu_resource_map_coherent(VirtIOGPU *g,
+                                 struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_simple_resource *res;
+    struct virtio_gpu_resource_map_coherent map;
+
+    VIRTIO_GPU_FILL_CMD(map);
+    virtio_gpu_map_bswap(&map);
+    trace_virtio_gpu_cmd_res_map_coherent(map.resource_id);
+
+    res = virtio_gpu_find_resource(g, map.resource_id);
+    if (!res || res->type != VIRTIO_GPU_RES_TYPE_COHERENT) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
+                      __func__, map.resource_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return;
+    }
+    fprintf(stderr, "%s: res %d, off %" PRIx64 ", size %x, hostmem %" PRIx64 "\n",
+            __func__, map.resource_id, map.offset, map.size, res->hostmem);
+
+#if 0
+    uint32_t pformat;
+    void *ptr;
+
+    pformat = virtio_gpu_get_pixman_format(res->format);
+    ptr = memory_region_get_ram_ptr(&g->coherent);
+    res->image = pixman_image_create_bits(pformat,
+                                          res->width,
+                                          res->height,
+                                          ptr += map.offset,
+                                          res->stride);
+#endif
 }
 
 static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
@@ -926,6 +997,9 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         break;
     case VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING:
         virtio_gpu_resource_detach_backing(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_RESOURCE_MAP_COHERENT:
+        virtio_gpu_resource_map_coherent(g, cmd);
         break;
     default:
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
@@ -1307,6 +1381,10 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
         return;
     }
 
+    if (g->conf.coherent) {
+        fprintf(stderr, "%s: coherent enabled\n", __func__);
+    }
+
     g->use_virgl_renderer = false;
 #if !defined(CONFIG_VIRGL) || defined(HOST_WORDS_BIGENDIAN)
     have_virgl = false;
@@ -1487,6 +1565,7 @@ static Property virtio_gpu_properties[] = {
                     VIRTIO_GPU_FLAG_EDID_ENABLED, false),
     DEFINE_PROP_BIT("zerocopy", VirtIOGPU, conf.flags,
                     VIRTIO_GPU_FLAG_ZEROCOPY_ENABLED, false),
+    DEFINE_PROP_SIZE("coherent", VirtIOGPU, conf.coherent, 0),
     DEFINE_PROP_UINT32("xres", VirtIOGPU, conf.xres, 1024),
     DEFINE_PROP_UINT32("yres", VirtIOGPU, conf.yres, 768),
     DEFINE_PROP_END_OF_LIST(),
