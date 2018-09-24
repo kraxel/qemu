@@ -167,6 +167,7 @@ int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
 void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
                                     struct iovec *iov, uint32_t count);
 void virtio_gpu_process_cmdq(VirtIOGPU *g);
+pixman_format_code_t virtio_gpu_get_pixman_format(uint32_t virtio_gpu_format);
 
 /* virtio-gpu-3d.c */
 void virtio_gpu_virgl_process_cmd(VirtIOGPU *g,

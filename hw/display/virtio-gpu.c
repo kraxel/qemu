@@ -339,7 +339,7 @@ void virtio_gpu_get_edid(VirtIOGPU *g,
     virtio_gpu_ctrl_response(g, cmd, &edid.hdr, sizeof(edid));
 }
 
-static pixman_format_code_t get_pixman_format(uint32_t virtio_gpu_format)
+pixman_format_code_t virtio_gpu_get_pixman_format(uint32_t virtio_gpu_format)
 {
     switch (virtio_gpu_format) {
     case VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM:
@@ -409,7 +409,7 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     res->format = c2d.format;
     res->resource_id = c2d.resource_id;
 
-    pformat = get_pixman_format(c2d.format);
+    pformat = virtio_gpu_get_pixman_format(c2d.format);
     if (!pformat) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: host couldn't handle guest format %d\n",
@@ -1183,7 +1183,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
         res->iov_cnt = qemu_get_be32(f);
 
         /* allocate */
-        pformat = get_pixman_format(res->format);
+        pformat = virtio_gpu_get_pixman_format(res->format);
         if (!pformat) {
             g_free(res);
             return -EINVAL;
