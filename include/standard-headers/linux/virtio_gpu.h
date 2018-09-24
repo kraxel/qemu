@@ -43,6 +43,7 @@
 #define VIRTIO_GPU_F_VIRGL     0
 #define VIRTIO_GPU_F_EDID      1
 #define VIRTIO_GPU_F_ZEROCOPY  2
+#define VIRTIO_GPU_F_COHERENT  3
 
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
@@ -69,6 +70,7 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_CMD_TRANSFER_TO_HOST_3D,
 	VIRTIO_GPU_CMD_TRANSFER_FROM_HOST_3D,
 	VIRTIO_GPU_CMD_SUBMIT_3D,
+	VIRTIO_GPU_CMD_RESOURCE_MAP_COHERENT,
 
 	/* cursor commands */
 	VIRTIO_GPU_CMD_UPDATE_CURSOR = 0x0300,
@@ -92,6 +94,7 @@ enum virtio_gpu_ctrl_type {
 
 #define VIRTIO_GPU_FLAG_FENCE     (1 << 0)
 #define VIRTIO_GPU_FLAG_ZEROCOPY  (2 << 0)
+#define VIRTIO_GPU_FLAG_COHERENT  (3 << 0)
 
 struct virtio_gpu_ctrl_hdr {
 	uint32_t type;
@@ -262,6 +265,14 @@ struct virtio_gpu_cmd_submit {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t size;
 	uint32_t padding;
+};
+
+/* VIRTIO_GPU_CMD_RESOURCE_MAP_COHERENT */
+struct virtio_gpu_resource_map_coherent {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t resource_id;
+	uint32_t size;
+	uint64_t offset;
 };
 
 #define VIRTIO_GPU_CAPSET_VIRGL 1
