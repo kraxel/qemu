@@ -363,16 +363,17 @@ pixman_format_code_t virtio_gpu_get_pixman_format(uint32_t virtio_gpu_format)
     }
 }
 
-static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
-                                   uint32_t width, uint32_t height)
+static uint32_t calc_image_stride(pixman_format_code_t pformat,
+                                  int32_t width)
 {
-    /* Copied from pixman/pixman-bits-image.c, skip integer overflow check.
+    /*
+     * Copied from pixman/pixman-bits-image.c, skip integer overflow check.
      * pixman_image_create_bits will fail in case it overflow.
      */
 
     int bpp = PIXMAN_FORMAT_BPP(pformat);
     int stride = ((width * bpp + 0x1f) >> 5) * sizeof(uint32_t);
-    return height * stride;
+    return stride;
 }
 
 static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
@@ -419,7 +420,8 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
         return;
     }
 
-    res->hostmem = calc_image_hostmem(pformat, c2d.width, c2d.height);
+    res->stride = calc_image_stride(pformat, res->width);
+    res->hostmem = res->stride * res->height;
     if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
         res->image = pixman_image_create_bits(pformat,
                                               c2d.width,
@@ -1196,7 +1198,8 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
             return -EINVAL;
         }
 
-        res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
+        res->stride = calc_image_stride(pformat, res->width);
+        res->hostmem = res->stride * res->height;
 
         res->addrs = g_new(uint64_t, res->iov_cnt);
         res->iov = g_new(struct iovec, res->iov_cnt);
