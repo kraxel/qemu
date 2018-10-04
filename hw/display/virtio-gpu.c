@@ -242,6 +242,36 @@ virtio_gpu_find_resource(VirtIOGPU *g, uint32_t resource_id)
     return NULL;
 }
 
+static void virtio_gpu_free_resource_cb(void *obj)
+{
+    struct virtio_gpu_simple_resource *res = obj;
+
+    g_free(res);
+}
+
+static void virtio_gpu_free_resource(VirtIOGPU *g,
+                                     struct virtio_gpu_simple_resource *res)
+{
+    Object *obj = OBJECT(res);
+
+    QTAILQ_REMOVE(&g->reslist, res, next);
+    object_unref(obj);
+}
+
+static struct virtio_gpu_simple_resource *
+virtio_gpu_alloc_resource(VirtIOGPU *g, int resource_id)
+{
+    struct virtio_gpu_simple_resource *res;
+    Object *obj;
+
+    obj = object_new(TYPE_VIRTIO_GPU_RESOURCE);
+    obj->free = virtio_gpu_free_resource_cb;
+    res = VIRTIO_GPU_RESOURCE(obj);
+    res->resource_id = resource_id;
+    QTAILQ_INSERT_HEAD(&g->reslist, res, next);
+    return res;
+}
+
 void virtio_gpu_ctrl_response(VirtIOGPU *g,
                               struct virtio_gpu_ctrl_command *cmd,
                               struct virtio_gpu_ctrl_hdr *resp,
@@ -402,19 +432,18 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
         return;
     }
 
-    res = g_new0(struct virtio_gpu_simple_resource, 1);
+    res = virtio_gpu_alloc_resource(g, c2d.resource_id);
 
     res->width = c2d.width;
     res->height = c2d.height;
     res->format = c2d.format;
-    res->resource_id = c2d.resource_id;
 
     pformat = get_pixman_format(c2d.format);
     if (!pformat) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: host couldn't handle guest format %d\n",
                       __func__, c2d.format);
-        g_free(res);
+        virtio_gpu_free_resource(g, res);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
         return;
     }
@@ -431,12 +460,11 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: resource creation failed %d %d %d\n",
                       __func__, c2d.resource_id, c2d.width, c2d.height);
-        g_free(res);
+        virtio_gpu_free_resource(g, res);
         cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
         return;
     }
 
-    QTAILQ_INSERT_HEAD(&g->reslist, res, next);
     g->hostmem += res->hostmem;
 }
 
@@ -483,9 +511,8 @@ static void virtio_gpu_resource_destroy(VirtIOGPU *g,
 
     pixman_image_unref(res->image);
     virtio_gpu_cleanup_mapping(g, res);
-    QTAILQ_REMOVE(&g->reslist, res, next);
     g->hostmem -= res->hostmem;
-    g_free(res);
+    virtio_gpu_free_resource(g, res);
 }
 
 static void virtio_gpu_resource_unref(VirtIOGPU *g,
@@ -1175,8 +1202,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
 
     resource_id = qemu_get_be32(f);
     while (resource_id != 0) {
-        res = g_new0(struct virtio_gpu_simple_resource, 1);
-        res->resource_id = resource_id;
+        res = virtio_gpu_alloc_resource(g, resource_id);
         res->width = qemu_get_be32(f);
         res->height = qemu_get_be32(f);
         res->format = qemu_get_be32(f);
@@ -1185,14 +1211,14 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
         /* allocate */
         pformat = get_pixman_format(res->format);
         if (!pformat) {
-            g_free(res);
+            virtio_gpu_free_resource(g, res);
             return -EINVAL;
         }
         res->image = pixman_image_create_bits(pformat,
                                               res->width, res->height,
                                               NULL, 0);
         if (!res->image) {
-            g_free(res);
+            virtio_gpu_free_resource(g, res);
             return -EINVAL;
         }
 
@@ -1229,12 +1255,11 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
                 res->iov_cnt = i;
                 virtio_gpu_cleanup_mapping(g, res);
                 pixman_image_unref(res->image);
-                g_free(res);
+                virtio_gpu_free_resource(g, res);
                 return -EINVAL;
             }
         }
 
-        QTAILQ_INSERT_HEAD(&g->reslist, res, next);
         g->hostmem += res->hostmem;
 
         resource_id = qemu_get_be32(f);
@@ -1469,9 +1494,16 @@ static const TypeInfo virtio_gpu_info = {
     .class_init = virtio_gpu_class_init,
 };
 
+static const TypeInfo virtio_gpu_resource_info = {
+    .name = TYPE_VIRTIO_GPU_RESOURCE,
+    .parent = TYPE_OBJECT,
+    .instance_size = sizeof(struct virtio_gpu_simple_resource),
+};
+
 static void virtio_register_types(void)
 {
     type_register_static(&virtio_gpu_info);
+    type_register_static(&virtio_gpu_resource_info);
 }
 
 type_init(virtio_register_types)

@@ -26,9 +26,15 @@
 #define VIRTIO_GPU(obj)                                        \
         OBJECT_CHECK(VirtIOGPU, (obj), TYPE_VIRTIO_GPU)
 
+#define TYPE_VIRTIO_GPU_RESOURCE "virtio-gpu-resource"
+#define VIRTIO_GPU_RESOURCE(obj)                                        \
+    OBJECT_CHECK(struct virtio_gpu_simple_resource,                     \
+                 (obj), TYPE_VIRTIO_GPU_RESOURCE)
+
 #define VIRTIO_ID_GPU 16
 
 struct virtio_gpu_simple_resource {
+    Object obj;
     uint32_t resource_id;
     uint32_t width;
     uint32_t height;
