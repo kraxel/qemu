@@ -393,8 +393,8 @@ static pixman_format_code_t get_pixman_format(uint32_t virtio_gpu_format)
     }
 }
 
-static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
-                                   uint32_t width, uint32_t height)
+static uint32_t calc_image_stride(pixman_format_code_t pformat,
+                                  uint32_t width)
 {
     /* Copied from pixman/pixman-bits-image.c, skip integer overflow check.
      * pixman_image_create_bits will fail in case it overflow.
@@ -402,13 +402,14 @@ static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
 
     int bpp = PIXMAN_FORMAT_BPP(pformat);
     int stride = ((width * bpp + 0x1f) >> 5) * sizeof(uint32_t);
-    return height * stride;
+    return stride;
 }
 
 static void virtio_gpu_resource_create_pixman(VirtIOGPU *g,
                                               struct virtio_gpu_simple_resource *res)
 {
-    res->hostmem = calc_image_hostmem(res->pformat, res->width, res->height);
+    res->stride = calc_image_stride(res->pformat, res->width);
+    res->hostmem = res->stride * res->height;
     if (res->hostmem + g->hostmem >= g->conf.max_hostmem) {
         return;
     }
