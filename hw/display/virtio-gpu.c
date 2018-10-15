@@ -405,10 +405,23 @@ static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
     return height * stride;
 }
 
+static void virtio_gpu_resource_create_pixman(VirtIOGPU *g,
+                                              struct virtio_gpu_simple_resource *res)
+{
+    res->hostmem = calc_image_hostmem(res->pformat, res->width, res->height);
+    if (res->hostmem + g->hostmem >= g->conf.max_hostmem) {
+        return;
+    }
+
+    res->image = pixman_image_create_bits(res->pformat,
+                                          res->width,
+                                          res->height,
+                                          NULL, 0);
+}
+
 static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
                                           struct virtio_gpu_ctrl_command *cmd)
 {
-    pixman_format_code_t pformat;
     struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_resource_create_2d c2d;
 
@@ -438,8 +451,8 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     res->height = c2d.height;
     res->format = c2d.format;
 
-    pformat = get_pixman_format(c2d.format);
-    if (!pformat) {
+    res->pformat = get_pixman_format(c2d.format);
+    if (!res->pformat) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: host couldn't handle guest format %d\n",
                       __func__, c2d.format);
@@ -448,14 +461,7 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
         return;
     }
 
-    res->hostmem = calc_image_hostmem(pformat, c2d.width, c2d.height);
-    if (res->hostmem + g->hostmem < g->conf.max_hostmem) {
-        res->image = pixman_image_create_bits(pformat,
-                                              c2d.width,
-                                              c2d.height,
-                                              NULL, 0);
-    }
-
+    virtio_gpu_resource_create_pixman(g, res);
     if (!res->image) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: resource creation failed %d %d %d\n",
@@ -1195,7 +1201,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
     VirtIOGPU *g = opaque;
     struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_scanout *scanout;
-    uint32_t resource_id, pformat;
+    uint32_t resource_id;
     int i;
 
     g->hostmem = 0;
@@ -1209,20 +1215,17 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
         res->iov_cnt = qemu_get_be32(f);
 
         /* allocate */
-        pformat = get_pixman_format(res->format);
-        if (!pformat) {
-            virtio_gpu_free_resource(g, res);
-            return -EINVAL;
-        }
-        res->image = pixman_image_create_bits(pformat,
-                                              res->width, res->height,
-                                              NULL, 0);
-        if (!res->image) {
+        res->pformat = get_pixman_format(res->format);
+        if (!res->pformat) {
             virtio_gpu_free_resource(g, res);
             return -EINVAL;
         }
 
-        res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
+        virtio_gpu_resource_create_pixman(g, res);
+        if (!res->image) {
+            virtio_gpu_free_resource(g, res);
+            return -EINVAL;
+        }
 
         res->addrs = g_new(uint64_t, res->iov_cnt);
         res->iov = g_new(struct iovec, res->iov_cnt);

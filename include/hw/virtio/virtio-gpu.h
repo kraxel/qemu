@@ -39,6 +39,7 @@ struct virtio_gpu_simple_resource {
     uint32_t width;
     uint32_t height;
     uint32_t format;
+    pixman_format_code_t pformat;
     uint64_t *addrs;
     struct iovec *iov;
     unsigned int iov_cnt;
