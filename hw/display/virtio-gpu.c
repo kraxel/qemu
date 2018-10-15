@@ -246,6 +246,7 @@ static void virtio_gpu_free_resource_cb(void *obj)
 {
     struct virtio_gpu_simple_resource *res = obj;
 
+    qemu_vfree(res->imagedata);
     g_free(res);
 }
 
@@ -255,6 +256,15 @@ static void virtio_gpu_free_resource(VirtIOGPU *g,
     Object *obj = OBJECT(res);
 
     QTAILQ_REMOVE(&g->reslist, res, next);
+    object_unref(obj);
+}
+
+static void virtio_gpu_pixman_unref_resource(pixman_image_t *image,
+                                             void *opaque)
+{
+    struct virtio_gpu_simple_resource *res = opaque;
+    Object *obj = OBJECT(res);
+
     object_unref(obj);
 }
 
@@ -409,15 +419,24 @@ static void virtio_gpu_resource_create_pixman(VirtIOGPU *g,
                                               struct virtio_gpu_simple_resource *res)
 {
     res->stride = calc_image_stride(res->pformat, res->width);
-    res->hostmem = res->stride * res->height;
+    res->hostmem = QEMU_ALIGN_UP(res->stride * res->height, getpagesize());
     if (res->hostmem + g->hostmem >= g->conf.max_hostmem) {
+        return;
+    }
+
+    res->imagedata = qemu_try_memalign(getpagesize(), res->hostmem);
+    if (!res->imagedata) {
         return;
     }
 
     res->image = pixman_image_create_bits(res->pformat,
                                           res->width,
                                           res->height,
-                                          NULL, 0);
+                                          res->imagedata,
+                                          res->stride);
+    object_ref(OBJECT(res));
+    pixman_image_set_destroy_function
+        (res->image, virtio_gpu_pixman_unref_resource, res);
 }
 
 static void virtio_gpu_resource_create_2d(VirtIOGPU *g,

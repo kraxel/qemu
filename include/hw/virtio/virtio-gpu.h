@@ -46,6 +46,7 @@ struct virtio_gpu_simple_resource {
     unsigned int iov_cnt;
     uint32_t scanout_bitmask;
     pixman_image_t *image;
+    void *imagedata;
     uint64_t hostmem;
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
 };
