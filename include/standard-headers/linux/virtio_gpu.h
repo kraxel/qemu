@@ -40,8 +40,17 @@
 
 #include "standard-headers/linux/types.h"
 
-#define VIRTIO_GPU_F_VIRGL 0
-#define VIRTIO_GPU_F_EDID  1
+#define VIRTIO_GPU_F_VIRGL               0
+#define VIRTIO_GPU_F_EDID                1
+
+/* supports VIRTIO_GPU_CMD_RESOURCE_CREATE_V2 command */
+#define VIRTIO_GPU_F_RES_V2              2
+
+/* supports VIRTIO_GPU_RESOURCE_ALLOC_NO_TRANSFER alloc flag */
+#define VIRTIO_GPU_F_RES_NO_TRANSFER     3
+
+/* supports VIRTIO_GPU_RESOURCE_ALLOC_HOST_COHERENT alloc flag */
+#define VIRTIO_GPU_F_RES_HOST_COHERENT   4
 
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
@@ -58,6 +67,8 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_CMD_GET_CAPSET_INFO,
 	VIRTIO_GPU_CMD_GET_CAPSET,
 	VIRTIO_GPU_CMD_GET_EDID,
+	VIRTIO_GPU_CMD_RESOURCE_CREATE_V2,
+	VIRTIO_GPU_CMD_RESOURCE_MAP,
 
 	/* 3d commands */
 	VIRTIO_GPU_CMD_CTX_CREATE = 0x0200,
@@ -79,6 +90,7 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_RESP_OK_CAPSET_INFO,
 	VIRTIO_GPU_RESP_OK_CAPSET,
 	VIRTIO_GPU_RESP_OK_EDID,
+	VIRTIO_GPU_RESP_OK_RESOURCE_INFO,
 
 	/* error responses */
 	VIRTIO_GPU_RESP_ERR_UNSPEC = 0x1200,
@@ -260,6 +272,44 @@ struct virtio_gpu_cmd_submit {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t size;
 	uint32_t padding;
+};
+
+/* VIRTIO_GPU_CMD_RESOURCE_CREATE_V2 */
+#define VIRTIO_GPU_RESOURCE_ALLOC_NO_TRANSFER    (1 << 0)
+#define VIRTIO_GPU_RESOURCE_ALLOC_HOST_COHERENT  (1 << 1)
+struct virtio_gpu_cmd_resource_create_v2 {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t resource_id;
+	uint32_t alloc_flags;
+	uint32_t format;
+	uint32_t width;
+	uint32_t height;
+	/* 3d only */
+	uint32_t target;
+	uint32_t bind;
+	uint32_t depth;
+	uint32_t array_size;
+	uint32_t last_level;
+	uint32_t nr_samples;
+	uint32_t flags;
+	/* planar */
+	uint32_t offset[4];
+};
+
+/* VIRTIO_GPU_RESP_OK_RESOURCE_INFO */
+struct virtio_gpu_resp_resource_info {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t stride[4];
+	uint32_t offset[4];
+	uint32_t size;
+};
+
+/* VIRTIO_GPU_CMD_RESOURCE_MAP */
+struct virtio_gpu_cmd_resource_map {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t resource_id;
+	uint32_t padding;
+	uint64_t offset;
 };
 
 #define VIRTIO_GPU_CAPSET_VIRGL 1
