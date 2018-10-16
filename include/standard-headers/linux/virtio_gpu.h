@@ -51,6 +51,38 @@
  */
 #define VIRTIO_GPU_F_EDID                1
 
+/*
+ * VIRTIO_GPU_CMD_MEMORY_CREATE
+ * VIRTIO_GPU_CMD_MEMORY_UNREF
+ * VIRTIO_GPU_CMD_RESOURCE_CREATE_V2
+ * VIRTIO_GPU_CMD_RESOURCE_ATTACH_MEMORY
+ */
+#define VIRTIO_GPU_F_MEMORY              2
+
+/*
+ * supports memory type:
+ *   VIRTIO_GPU_MEMORY_SHARED_GUEST
+ */
+#define VIRTIO_GPU_F_MEM_SHARED_GUEST    3
+
+/*
+ * supports memory type:
+ *   VIRTIO_GPU_MEMORY_HOST_COHERENT
+ */
+#define VIRTIO_GPU_F_MEM_HOST_COHERENT   4
+
+/*
+ * supports memory type:
+ *   VIRTIO_GPU_MEMORY_HOST_SYNC
+ */
+#define VIRTIO_GPU_F_MEM_HOST_SYNC       5
+
+/*
+ * supports memory type:
+ *   VIRTIO_GPU_MEMORY_HOST_LOCAL
+ */
+#define VIRTIO_GPU_F_MEM_HOST_LOCAL      6
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 
@@ -66,6 +98,11 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_CMD_GET_CAPSET_INFO,
 	VIRTIO_GPU_CMD_GET_CAPSET,
 	VIRTIO_GPU_CMD_GET_EDID,
+	VIRTIO_GPU_CMD_MEMORY_CREATE,
+	VIRTIO_GPU_CMD_MEMORY_UNREF,
+	VIRTIO_GPU_CMD_RESOURCE_ATTACH_MEMORY,
+	VIRTIO_GPU_CMD_RESOURCE_CREATE_V2,
+	VIRTIO_GPU_CMD_MEMORY_MAP,
 
 	/* 3d commands */
 	VIRTIO_GPU_CMD_CTX_CREATE = 0x0200,
@@ -87,6 +124,7 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_RESP_OK_CAPSET_INFO,
 	VIRTIO_GPU_RESP_OK_CAPSET,
 	VIRTIO_GPU_RESP_OK_EDID,
+	VIRTIO_GPU_RESP_OK_RESOURCE_INFO,
 
 	/* error responses */
 	VIRTIO_GPU_RESP_ERR_UNSPEC = 0x1200,
@@ -95,6 +133,55 @@ enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID,
 	VIRTIO_GPU_RESP_ERR_INVALID_CONTEXT_ID,
 	VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER,
+	VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID,
+};
+
+enum virtio_gpu_memory_type {
+	VIRTIO_GPU_MEMORY_UNDEFINED = 0,
+
+	/*
+	 * Traditional virtio-gpu memory.
+	 * Has both host and guest side storage.
+	 *
+	 * VIRTIO_GPU_CMD_TRANSFER_* commands are used
+	 * to copy between guest and host storage.
+	 *
+	 * Created using VIRTIO_GPU_CMD_MEMORY_CREATE.
+	 */
+	VIRTIO_GPU_MEMORY_TRANSFER,
+
+	/*
+	 * Shared storage. allocated by guest.
+	 *
+	 * Created using VIRTIO_GPU_CMD_MEMORY_CREATE.
+	 */
+	VIRTIO_GPU_MEMORY_SHARED_GUEST,
+
+	/*
+	 * Host allocated storage.
+	 *
+	 * Created using VIRTIO_GPU_CMD_MEMORY_HOST_CREATE.
+	 *
+	 * In practice that will be host gpu buffer objects
+	 * allocated using gbm.
+	 *
+	 * VIRTIO_GPU_MEMORY_HOST_COHERENT
+	 *   Can be mapped into the guest, using virtio
+	 *   shared memory (VIRTIO_PCI_CAP_SHARED_MEMORY_CFG).
+	 *
+	 * VIRTIO_GPU_MEMORY_HOST_SYNC
+	 *   Can be mapped into the guest, using virtio
+	 *   shared memory (VIRTIO_PCI_CAP_SHARED_MEMORY_CFG).
+	 *   Not coherent, requires explicit flushing.
+	 *
+	 * VIRTIO_GPU_MEMORY_HOST_LOCAL
+	 *   Can not be mapped into the guest.  Expected to be used
+	 *   for memory the host can't map either (unmappable device
+	 *   memory).
+	 */
+	VIRTIO_GPU_MEMORY_HOST_COHERENT,
+	VIRTIO_GPU_MEMORY_HOST_SYNC,
+	VIRTIO_GPU_MEMORY_HOST_LOCAL,
 };
 
 #define VIRTIO_GPU_FLAG_FENCE (1 << 0)
@@ -146,6 +233,7 @@ struct virtio_gpu_resource_unref {
 struct virtio_gpu_resource_create_2d {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t resource_id;
+	/* memory_type is VIRTIO_GPU_MEMORY_TRANSFER */
 	uint32_t format;
 	uint32_t width;
 	uint32_t height;
@@ -187,6 +275,7 @@ struct virtio_gpu_resource_attach_backing {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t resource_id;
 	uint32_t nr_entries;
+	/* struct virtio_gpu_mem_entry entries follow here */
 };
 
 /* VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING */
@@ -230,6 +319,7 @@ struct virtio_gpu_transfer_host_3d {
 struct virtio_gpu_resource_create_3d {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t resource_id;
+	/* memory_type is VIRTIO_GPU_MEMORY_TRANSFER */
 	uint32_t target;
 	uint32_t format;
 	uint32_t bind;
@@ -268,6 +358,76 @@ struct virtio_gpu_cmd_submit {
 	struct virtio_gpu_ctrl_hdr hdr;
 	uint32_t size;
 	uint32_t padding;
+};
+
+/* VIRTIO_GPU_CMD_MEMORY_CREATE */
+struct virtio_gpu_cmd_memory_create {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t memory_id;
+	uint32_t memory_type;
+	uint32_t flags;
+	uint32_t nr_entries;
+	/* struct virtio_gpu_mem_entry entries follow here */
+};
+
+/* VIRTIO_GPU_CMD_MEMORY_HOST_CREATE */
+struct virtio_gpu_cmd_memory_host_create {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t memory_id;
+	uint32_t memory_type;
+	uint32_t flags;
+	uint32_t padding;
+};
+
+/* VIRTIO_GPU_CMD_MEMORY_MAP */
+struct virtio_gpu_cmd_memory_map {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t memory_id;
+	uint32_t padding;
+	uint64_t offset;
+};
+
+/* VIRTIO_GPU_CMD_MEMORY_UNREF */
+struct virtio_gpu_cmd_memory_unref {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t memory_id;
+	uint32_t padding;
+};
+
+/* VIRTIO_GPU_CMD_RESOURCE_ATTACH_MEMORY */
+struct virtio_gpu_cmd_resource_attach_memory {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t resource_id;
+	uint32_t memory_id;
+	uint32_t plane;
+	uint32_t padding;
+	uint64_t offset;
+};
+
+/* VIRTIO_GPU_CMD_RESOURCE_CREATE_V2 */
+struct virtio_gpu_cmd_resource_create_v2 {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t resource_id;
+	uint32_t memory_type;
+	uint32_t format;
+	uint32_t width;
+	uint32_t height;
+	/* 3d only */
+	uint32_t target;
+	uint32_t bind;
+	uint32_t depth;
+	uint32_t array_size;
+	uint32_t last_level;
+	uint32_t nr_samples;
+	uint32_t flags;
+};
+
+/* VIRTIO_GPU_RESP_OK_RESOURCE_INFO */
+struct virtio_gpu_resp_resource_info {
+	struct virtio_gpu_ctrl_hdr hdr;
+	uint32_t align[4];
+	uint32_t stride[4];
+	uint32_t size[4];
 };
 
 #define VIRTIO_GPU_CAPSET_VIRGL 1
