@@ -57,6 +57,7 @@ static void virtio_gpu_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
                          PCI_BASE_ADDRESS_MEM_PREFETCH |
                          PCI_BASE_ADDRESS_MEM_TYPE_64,
                          &g->coherent);
+        virtio_pci_add_shm_cap(vpci_dev, 4, 0, g->conf.coherent, 0);
     }
 
     qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));

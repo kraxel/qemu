@@ -140,6 +140,7 @@ static void virtio_vga_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
                          PCI_BASE_ADDRESS_MEM_PREFETCH |
                          PCI_BASE_ADDRESS_MEM_TYPE_64,
                          &g->coherent);
+        virtio_pci_add_shm_cap(vpci_dev, 4, 0, g->conf.coherent, 0);
     } else {
         vpci_dev->msix_bar_idx = 4;
     }
