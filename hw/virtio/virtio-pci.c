@@ -1108,10 +1108,10 @@ static int virtio_pci_add_mem_cap(VirtIOPCIProxy *proxy,
     return offset;
 }
 
-static int virtio_pci_add_shm_cap(VirtIOPCIProxy *proxy,
-                                   uint8_t bar,
-                                   uint64_t offset, uint64_t length,
-                                   uint8_t id)
+int virtio_pci_add_shm_cap(VirtIOPCIProxy *proxy,
+                           uint8_t bar,
+                           uint64_t offset, uint64_t length,
+                           uint8_t id)
 {
     struct virtio_pci_shm_cap cap = {
         .cap.cap_len = sizeof cap,
