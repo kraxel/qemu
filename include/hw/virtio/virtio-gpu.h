@@ -39,6 +39,12 @@
 
 #define VIRTIO_ID_GPU 16
 
+struct virtio_gpu_memory_region {
+    uint32_t memory_id;
+    uint32_t ref;
+    QTAILQ_ENTRY(virtio_gpu_memory_region) next;
+};
+
 struct virtio_gpu_simple_resource {
     uint32_t resource_id;
     uint32_t width;
@@ -50,6 +56,7 @@ struct virtio_gpu_simple_resource {
     uint32_t scanout_bitmask;
     pixman_image_t *image;
     uint64_t hostmem;
+    struct virtio_gpu_memory_region *mem;
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
 };
 
@@ -141,6 +148,7 @@ typedef struct VirtIOGPU {
     QEMUBH *cursor_bh;
 
     QTAILQ_HEAD(, virtio_gpu_simple_resource) reslist;
+    QTAILQ_HEAD(, virtio_gpu_memory_region) memlist;
     QTAILQ_HEAD(, virtio_gpu_ctrl_command) cmdq;
     QTAILQ_HEAD(, virtio_gpu_ctrl_command) fenceq;
 
@@ -220,5 +228,16 @@ void virtio_gpu_virgl_fence_poll(VirtIOGPU *g);
 void virtio_gpu_virgl_reset(VirtIOGPU *g);
 int virtio_gpu_virgl_init(VirtIOGPU *g);
 int virtio_gpu_virgl_get_num_capsets(VirtIOGPU *g);
+
+/* virtio-mem.c */
+struct virtio_gpu_memory_region*
+virtio_gpu_memory_region_new(VirtIOGPU *g, uint32_t memory_id);
+struct virtio_gpu_memory_region*
+virtio_gpu_memory_region_find(VirtIOGPU *g, uint32_t memory_id);
+struct virtio_gpu_memory_region*
+virtio_gpu_memory_region_ref(VirtIOGPU *g,
+                             struct virtio_gpu_memory_region *mem);
+void virtio_gpu_memory_region_unref(VirtIOGPU *g,
+                                    struct virtio_gpu_memory_region *mem);
 
 #endif

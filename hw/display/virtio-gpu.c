@@ -689,6 +689,8 @@ static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
     res->iov_cnt = 0;
     g_free(res->addrs);
     res->addrs = NULL;
+    virtio_gpu_memory_region_unref(g, res->mem);
+    res->mem = NULL;
 }
 
 static void
@@ -716,6 +718,7 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
         return;
     }
 
+    res->mem = virtio_gpu_memory_region_new(g, -1);
     ret = virtio_gpu_create_mapping_iov(g, &ab, cmd, &res->addrs, &res->iov);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
@@ -1128,6 +1131,7 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
     g->ctrl_bh = qemu_bh_new(virtio_gpu_ctrl_bh, g);
     g->cursor_bh = qemu_bh_new(virtio_gpu_cursor_bh, g);
     QTAILQ_INIT(&g->reslist);
+    QTAILQ_INIT(&g->memlist);
     QTAILQ_INIT(&g->cmdq);
     QTAILQ_INIT(&g->fenceq);
 }
