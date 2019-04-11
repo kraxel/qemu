@@ -188,6 +188,9 @@ virtio_gpu_base_get_features(VirtIODevice *vdev, uint64_t features,
     if (virtio_gpu_edid_enabled(g->conf)) {
         features |= (1 << VIRTIO_GPU_F_EDID);
     }
+    if (virtio_gpu_memory_enabled(g->conf)) {
+        features |= (1 << VIRTIO_GPU_F_MEMORY);
+    }
 
     return features;
 }
@@ -196,10 +199,13 @@ static void
 virtio_gpu_base_set_features(VirtIODevice *vdev, uint64_t features)
 {
     static const uint32_t virgl = (1 << VIRTIO_GPU_F_VIRGL);
+    static const uint32_t memory = (1 << VIRTIO_GPU_F_MEMORY);
     VirtIOGPUBase *g = VIRTIO_GPU_BASE(vdev);
 
     g->use_virgl_renderer = ((features & virgl) == virgl);
-    trace_virtio_gpu_features(g->use_virgl_renderer);
+    g->use_memory_regions = ((features & memory) == memory);
+    trace_virtio_gpu_features(g->use_virgl_renderer,
+                              g->use_memory_regions);
 }
 
 static void

@@ -698,7 +698,7 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
 
 static void
 virtio_gpu_resource_attach_memory(VirtIOGPU *g,
-                                   struct virtio_gpu_ctrl_command *cmd)
+                                  struct virtio_gpu_ctrl_command *cmd)
 {
     struct virtio_gpu_cmd_resource_attach_memory am;
     struct virtio_gpu_simple_resource *res;
@@ -709,6 +709,13 @@ virtio_gpu_resource_attach_memory(VirtIOGPU *g,
     virtio_gpu_cram_bswap(&am);
     trace_virtio_gpu_cmd_res_mem_attach(am.resource_id, am.memory_id,
                                         am.plane, am.offset);
+
+    if (!g->parent_obj.use_memory_regions) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory regions disabled\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
 
     if (am.plane != 0) {
         /* planar formats not implemented */
@@ -1130,9 +1137,12 @@ static void virtio_gpu_device_realize(DeviceState *qdev, Error **errp)
 #else
     have_virgl = display_opengl;
 #endif
+
     if (!have_virgl) {
         g->parent_obj.conf.flags &= ~(1 << VIRTIO_GPU_FLAG_VIRGL_ENABLED);
     } else {
+        /* FIXME: incompatble with virgl */
+        g->parent_obj.conf.flags &= ~(1 << VIRTIO_GPU_FLAG_MEMORY_ENABLED);
 #if defined(CONFIG_VIRGL)
         VIRTIO_GPU_BASE(g)->virtio_config.num_capsets =
             virtio_gpu_virgl_get_num_capsets(g);
@@ -1264,6 +1274,8 @@ static Property virtio_gpu_properties[] = {
     DEFINE_PROP_BIT("stats", VirtIOGPU, parent_obj.conf.flags,
                     VIRTIO_GPU_FLAG_STATS_ENABLED, false),
 #endif
+    DEFINE_PROP_BIT("memory", VirtIOGPU, parent_obj.conf.flags,
+                    VIRTIO_GPU_FLAG_MEMORY_ENABLED, true),
     DEFINE_PROP_END_OF_LIST(),
 };
 

@@ -214,6 +214,13 @@ void virtio_gpu_cmd_memory_create(VirtIOGPU *g,
     virtio_gpu_bswap_32(&create, sizeof(create));
     trace_virtio_gpu_cmd_mem_create(create.memory_id);
 
+    if (!g->parent_obj.use_memory_regions) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory regions disabled\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
+
     if (create.memory_id == 0 || create.memory_id == -1) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region id is not allowed\n",
                       __func__);
@@ -282,6 +289,13 @@ void virtio_gpu_cmd_memory_unref(VirtIOGPU *g,
     VIRTIO_GPU_FILL_CMD(unref);
     virtio_gpu_bswap_32(&unref, sizeof(unref));
     trace_virtio_gpu_cmd_mem_unref(unref.memory_id);
+
+    if (!g->parent_obj.use_memory_regions) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory regions disabled\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
 
     if (unref.memory_id == 0 || unref.memory_id == -1) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region id is not allowed\n",
