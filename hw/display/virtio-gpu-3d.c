@@ -85,7 +85,7 @@ static void virgl_cmd_resource_unref(VirtIOGPU *g,
                                        &res_iovs,
                                        &num_iovs);
     if (res_iovs != NULL && num_iovs != 0) {
-        virtio_gpu_cleanup_mapping_iov(g, res_iovs, num_iovs);
+        virtio_gpu_cleanup_iov(g, res_iovs, num_iovs);
     }
     virgl_renderer_resource_unref(unref.resource_id);
 }
@@ -292,7 +292,7 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
     VIRTIO_GPU_FILL_CMD(att_rb);
     trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id);
 
-    ret = virtio_gpu_create_mapping_iov(g, &att_rb, cmd, NULL, &res_iovs);
+    ret = virtio_gpu_create_res_iov(g, &att_rb, cmd, NULL, &res_iovs);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
@@ -302,7 +302,7 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
                                              res_iovs, att_rb.nr_entries);
 
     if (ret != 0)
-        virtio_gpu_cleanup_mapping_iov(g, res_iovs, att_rb.nr_entries);
+        virtio_gpu_cleanup_iov(g, res_iovs, att_rb.nr_entries);
 }
 
 static void virgl_resource_detach_backing(VirtIOGPU *g,
@@ -321,7 +321,7 @@ static void virgl_resource_detach_backing(VirtIOGPU *g,
     if (res_iovs == NULL || num_iovs == 0) {
         return;
     }
-    virtio_gpu_cleanup_mapping_iov(g, res_iovs, num_iovs);
+    virtio_gpu_cleanup_iov(g, res_iovs, num_iovs);
 }
 
 

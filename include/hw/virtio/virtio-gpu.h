@@ -213,15 +213,20 @@ void virtio_gpu_get_display_info(VirtIOGPU *g,
                                  struct virtio_gpu_ctrl_command *cmd);
 void virtio_gpu_get_edid(VirtIOGPU *g,
                          struct virtio_gpu_ctrl_command *cmd);
-int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
-                                  struct virtio_gpu_resource_attach_backing *ab,
-                                  struct virtio_gpu_ctrl_command *cmd,
-                                  uint64_t **addr, struct iovec **iov);
-void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
-                                    struct iovec *iov, uint32_t count);
+int virtio_gpu_create_res_iov(VirtIOGPU *g,
+                              struct virtio_gpu_resource_attach_backing *ab,
+                              struct virtio_gpu_ctrl_command *cmd,
+                              uint64_t **addr, struct iovec **iov);
 void virtio_gpu_process_cmdq(VirtIOGPU *g);
 
 /* virtio-gpu-3d.c */
+int virtio_gpu_create_iov(VirtIOGPU *g,
+                          struct virtio_gpu_mem_entry *ents,
+                          int nr_entries,
+                          uint64_t **addr, struct iovec **iov);
+void virtio_gpu_cleanup_iov(VirtIOGPU *g,
+                            struct iovec *iov, uint32_t count);
+
 void virtio_gpu_virgl_process_cmd(VirtIOGPU *g,
                                   struct virtio_gpu_ctrl_command *cmd);
 void virtio_gpu_virgl_fence_poll(VirtIOGPU *g);

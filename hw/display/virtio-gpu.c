@@ -607,14 +607,14 @@ static void virtio_gpu_set_scanout(VirtIOGPU *g,
     scanout->height = ss.r.height;
 }
 
-int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
-                                  struct virtio_gpu_resource_attach_backing *ab,
-                                  struct virtio_gpu_ctrl_command *cmd,
-                                  uint64_t **addr, struct iovec **iov)
+int virtio_gpu_create_res_iov(VirtIOGPU *g,
+                              struct virtio_gpu_resource_attach_backing *ab,
+                              struct virtio_gpu_ctrl_command *cmd,
+                              uint64_t **addr, struct iovec **iov)
 {
     struct virtio_gpu_mem_entry *ents;
     size_t esize, s;
-    int i;
+    int ret;
 
     if (ab->nr_entries > 16384) {
         qemu_log_mask(LOG_GUEST_ERROR,
@@ -635,57 +635,16 @@ int virtio_gpu_create_mapping_iov(VirtIOGPU *g,
         return -1;
     }
 
-    *iov = g_malloc0(sizeof(struct iovec) * ab->nr_entries);
-    if (addr) {
-        *addr = g_malloc0(sizeof(uint64_t) * ab->nr_entries);
-    }
-    for (i = 0; i < ab->nr_entries; i++) {
-        uint64_t a = le64_to_cpu(ents[i].addr);
-        uint32_t l = le32_to_cpu(ents[i].length);
-        hwaddr len = l;
-        (*iov)[i].iov_len = l;
-        (*iov)[i].iov_base = dma_memory_map(VIRTIO_DEVICE(g)->dma_as,
-                                            a, &len, DMA_DIRECTION_TO_DEVICE);
-        if (addr) {
-            (*addr)[i] = a;
-        }
-        if (!(*iov)[i].iov_base || len != l) {
-            qemu_log_mask(LOG_GUEST_ERROR, "%s: failed to map MMIO memory for"
-                          " resource %d element %d\n",
-                          __func__, ab->resource_id, i);
-            virtio_gpu_cleanup_mapping_iov(g, *iov, i);
-            g_free(ents);
-            *iov = NULL;
-            if (addr) {
-                g_free(*addr);
-                *addr = NULL;
-            }
-            return -1;
-        }
-    }
+    ret = virtio_gpu_create_iov(g, ents, ab->nr_entries, addr, iov);
     g_free(ents);
-    return 0;
-}
-
-void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
-                                    struct iovec *iov, uint32_t count)
-{
-    int i;
-
-    for (i = 0; i < count; i++) {
-        dma_memory_unmap(VIRTIO_DEVICE(g)->dma_as,
-                         iov[i].iov_base, iov[i].iov_len,
-                         DMA_DIRECTION_TO_DEVICE,
-                         iov[i].iov_len);
-    }
-    g_free(iov);
+    return ret;
 }
 
 static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
                                        struct virtio_gpu_simple_resource *res)
 {
     if (res->mem) {
-        virtio_gpu_cleanup_mapping_iov(g, res->mem->iov, res->mem->iov_cnt);
+        virtio_gpu_cleanup_iov(g, res->mem->iov, res->mem->iov_cnt);
         virtio_gpu_memory_region_unref(g, res->mem);
         res->mem = NULL;
     }
@@ -719,7 +678,8 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
     }
 
     res->mem = virtio_gpu_memory_region_new(g, -1);
-    ret = virtio_gpu_create_mapping_iov(g, &ab, cmd, &res->mem->addrs, &res->mem->iov);
+    ret = virtio_gpu_create_res_iov(g, &ab, cmd, &res->mem->addrs,
+                                    &res->mem->iov);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
