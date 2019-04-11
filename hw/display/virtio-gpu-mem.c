@@ -119,3 +119,54 @@ virtio_gpu_memory_region_find(VirtIOGPU *g, uint32_t memory_id)
     }
     return NULL;
 }
+
+void virtio_gpu_memory_region_save(QEMUFile *f, VirtIOGPU *g,
+                                   struct virtio_gpu_memory_region *mem)
+{
+    unsigned int i;
+
+    for (i = 0; i < mem->iov_cnt; i++) {
+        qemu_put_be64(f, mem->addrs[i]);
+        qemu_put_be32(f, mem->iov[i].iov_len);
+    }
+}
+
+int virtio_gpu_memory_region_load(QEMUFile *f, VirtIOGPU *g,
+                                  struct virtio_gpu_memory_region *mem,
+                                  unsigned int iov_cnt)
+{
+    unsigned int i;
+
+    mem->iov_cnt = iov_cnt;
+    mem->addrs = g_new(uint64_t, iov_cnt);
+    mem->iov = g_new(struct iovec, iov_cnt);
+
+    /* read data */
+    for (i = 0; i < iov_cnt; i++) {
+        mem->addrs[i] = qemu_get_be64(f);
+        mem->iov[i].iov_len = qemu_get_be32(f);
+    }
+
+    /* restore mapping */
+    for (i = 0; i < iov_cnt; i++) {
+        hwaddr len = mem->iov[i].iov_len;
+        mem->iov[i].iov_base =
+            dma_memory_map(VIRTIO_DEVICE(g)->dma_as,
+                           mem->addrs[i], &len, DMA_DIRECTION_TO_DEVICE);
+
+        if (!mem->iov[i].iov_base || len != mem->iov[i].iov_len) {
+            /* Clean up the half-a-mapping we just created... */
+            if (mem->iov[i].iov_base) {
+                dma_memory_unmap(VIRTIO_DEVICE(g)->dma_as,
+                                 mem->iov[i].iov_base,
+                                 mem->iov[i].iov_len,
+                                 DMA_DIRECTION_TO_DEVICE,
+                                 mem->iov[i].iov_len);
+            }
+            /* ...and the mappings for previous loop iterations */
+            virtio_gpu_cleanup_iov(g, mem->iov, i);
+            return -EINVAL;
+        }
+    }
+    return 0;
+}

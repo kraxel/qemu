@@ -244,5 +244,10 @@ virtio_gpu_memory_region_ref(VirtIOGPU *g,
                              struct virtio_gpu_memory_region *mem);
 void virtio_gpu_memory_region_unref(VirtIOGPU *g,
                                     struct virtio_gpu_memory_region *mem);
+void virtio_gpu_memory_region_save(QEMUFile *f, VirtIOGPU *g,
+                                   struct virtio_gpu_memory_region *mem);
+int virtio_gpu_memory_region_load(QEMUFile *f, VirtIOGPU *g,
+                                  struct virtio_gpu_memory_region *mem,
+                                  unsigned int iov_cnt);
 
 #endif
