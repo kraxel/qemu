@@ -399,7 +399,7 @@ static void virtio_gpu_transfer_to_host_2d(VirtIOGPU *g,
     trace_virtio_gpu_cmd_res_xfer_toh_2d(t2d.resource_id);
 
     res = virtio_gpu_find_resource(g, t2d.resource_id);
-    if (!res || !res->iov) {
+    if (!res || !res->mem) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
                       __func__, t2d.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
@@ -431,12 +431,12 @@ static void virtio_gpu_transfer_to_host_2d(VirtIOGPU *g,
             src_offset = t2d.offset + stride * h;
             dst_offset = (t2d.r.y + h) * stride + (t2d.r.x * bpp);
 
-            iov_to_buf(res->iov, res->iov_cnt, src_offset,
+            iov_to_buf(res->mem->iov, res->mem->iov_cnt, src_offset,
                        (uint8_t *)img_data
                        + dst_offset, t2d.r.width * bpp);
         }
     } else {
-        iov_to_buf(res->iov, res->iov_cnt, 0,
+        iov_to_buf(res->mem->iov, res->mem->iov_cnt, 0,
                    pixman_image_get_data(res->image),
                    pixman_image_get_stride(res->image)
                    * pixman_image_get_height(res->image));
@@ -684,13 +684,11 @@ void virtio_gpu_cleanup_mapping_iov(VirtIOGPU *g,
 static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
                                        struct virtio_gpu_simple_resource *res)
 {
-    virtio_gpu_cleanup_mapping_iov(g, res->iov, res->iov_cnt);
-    res->iov = NULL;
-    res->iov_cnt = 0;
-    g_free(res->addrs);
-    res->addrs = NULL;
-    virtio_gpu_memory_region_unref(g, res->mem);
-    res->mem = NULL;
+    if (res->mem) {
+        virtio_gpu_cleanup_mapping_iov(g, res->mem->iov, res->mem->iov_cnt);
+        virtio_gpu_memory_region_unref(g, res->mem);
+        res->mem = NULL;
+    }
 }
 
 static void
@@ -713,19 +711,21 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
         return;
     }
 
-    if (res->iov) {
+    if (res->mem) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already has backing\n",
+                      __func__);
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
     }
 
     res->mem = virtio_gpu_memory_region_new(g, -1);
-    ret = virtio_gpu_create_mapping_iov(g, &ab, cmd, &res->addrs, &res->iov);
+    ret = virtio_gpu_create_mapping_iov(g, &ab, cmd, &res->mem->addrs, &res->mem->iov);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
     }
 
-    res->iov_cnt = ab.nr_entries;
+    res->mem->iov_cnt = ab.nr_entries;
 }
 
 static void
@@ -740,7 +740,7 @@ virtio_gpu_resource_detach_backing(VirtIOGPU *g,
     trace_virtio_gpu_cmd_res_back_detach(detach.resource_id);
 
     res = virtio_gpu_find_resource(g, detach.resource_id);
-    if (!res || !res->iov) {
+    if (!res || !res->mem) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
                       __func__, detach.resource_id);
         cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
@@ -981,10 +981,14 @@ static int virtio_gpu_save(QEMUFile *f, void *opaque, size_t size,
         qemu_put_be32(f, res->width);
         qemu_put_be32(f, res->height);
         qemu_put_be32(f, res->format);
-        qemu_put_be32(f, res->iov_cnt);
-        for (i = 0; i < res->iov_cnt; i++) {
-            qemu_put_be64(f, res->addrs[i]);
-            qemu_put_be32(f, res->iov[i].iov_len);
+        if (res->mem) {
+            qemu_put_be32(f, res->mem->iov_cnt);
+            for (i = 0; i < res->mem->iov_cnt; i++) {
+                qemu_put_be64(f, res->mem->addrs[i]);
+                qemu_put_be32(f, res->mem->iov[i].iov_len);
+            }
+        } else {
+            qemu_put_be32(f, 0);
         }
         qemu_put_buffer(f, (void *)pixman_image_get_data(res->image),
                         pixman_image_get_stride(res->image) * res->height);
@@ -1001,7 +1005,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
     struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_scanout *scanout;
     uint32_t resource_id, pformat;
-    int i;
+    int i, iov_cnt;
 
     g->hostmem = 0;
 
@@ -1012,7 +1016,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
         res->width = qemu_get_be32(f);
         res->height = qemu_get_be32(f);
         res->format = qemu_get_be32(f);
-        res->iov_cnt = qemu_get_be32(f);
+        iov_cnt = qemu_get_be32(f);
 
         /* allocate */
         pformat = virtio_gpu_get_pixman_format(res->format);
@@ -1030,35 +1034,39 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
 
         res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
 
-        res->addrs = g_new(uint64_t, res->iov_cnt);
-        res->iov = g_new(struct iovec, res->iov_cnt);
+        if (iov_cnt) {
+            res->mem = virtio_gpu_memory_region_new(g, -1);
+            res->mem->iov_cnt = iov_cnt;
+            res->mem->addrs = g_new(uint64_t, iov_cnt);
+            res->mem->iov = g_new(struct iovec, iov_cnt);
 
-        /* read data */
-        for (i = 0; i < res->iov_cnt; i++) {
-            res->addrs[i] = qemu_get_be64(f);
-            res->iov[i].iov_len = qemu_get_be32(f);
+            /* read data */
+            for (i = 0; i < res->mem->iov_cnt; i++) {
+                res->mem->addrs[i] = qemu_get_be64(f);
+                res->mem->iov[i].iov_len = qemu_get_be32(f);
+            }
         }
         qemu_get_buffer(f, (void *)pixman_image_get_data(res->image),
                         pixman_image_get_stride(res->image) * res->height);
 
         /* restore mapping */
-        for (i = 0; i < res->iov_cnt; i++) {
-            hwaddr len = res->iov[i].iov_len;
-            res->iov[i].iov_base =
+        for (i = 0; res->mem && i < res->mem->iov_cnt; i++) {
+            hwaddr len = res->mem->iov[i].iov_len;
+            res->mem->iov[i].iov_base =
                 dma_memory_map(VIRTIO_DEVICE(g)->dma_as,
-                               res->addrs[i], &len, DMA_DIRECTION_TO_DEVICE);
+                               res->mem->addrs[i], &len, DMA_DIRECTION_TO_DEVICE);
 
-            if (!res->iov[i].iov_base || len != res->iov[i].iov_len) {
+            if (!res->mem->iov[i].iov_base || len != res->mem->iov[i].iov_len) {
                 /* Clean up the half-a-mapping we just created... */
-                if (res->iov[i].iov_base) {
+                if (res->mem->iov[i].iov_base) {
                     dma_memory_unmap(VIRTIO_DEVICE(g)->dma_as,
-                                     res->iov[i].iov_base,
-                                     res->iov[i].iov_len,
+                                     res->mem->iov[i].iov_base,
+                                     res->mem->iov[i].iov_len,
                                      DMA_DIRECTION_TO_DEVICE,
-                                     res->iov[i].iov_len);
+                                     res->mem->iov[i].iov_len);
                 }
                 /* ...and the mappings for previous loop iterations */
-                res->iov_cnt = i;
+                res->mem->iov_cnt = i;
                 virtio_gpu_cleanup_mapping(g, res);
                 pixman_image_unref(res->image);
                 g_free(res);

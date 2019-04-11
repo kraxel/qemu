@@ -42,6 +42,9 @@
 struct virtio_gpu_memory_region {
     uint32_t memory_id;
     uint32_t ref;
+    uint64_t *addrs;
+    struct iovec *iov;
+    unsigned int iov_cnt;
     QTAILQ_ENTRY(virtio_gpu_memory_region) next;
 };
 
@@ -50,9 +53,6 @@ struct virtio_gpu_simple_resource {
     uint32_t width;
     uint32_t height;
     uint32_t format;
-    uint64_t *addrs;
-    struct iovec *iov;
-    unsigned int iov_cnt;
     uint32_t scanout_bitmask;
     pixman_image_t *image;
     uint64_t hostmem;
