@@ -41,9 +41,11 @@
 
 struct virtio_gpu_memory_region {
     uint32_t memory_id;
+    uint32_t memory_type;
     uint32_t ref;
     uint64_t size;
     uint64_t *addrs;
+    bool guest_ref;
     struct iovec *iov;
     unsigned int iov_cnt;
     QTAILQ_ENTRY(virtio_gpu_memory_region) next;
@@ -51,6 +53,7 @@ struct virtio_gpu_memory_region {
 
 struct virtio_gpu_simple_resource {
     uint32_t resource_id;
+    uint32_t memory_type;
     uint32_t width;
     uint32_t height;
     uint32_t format;
@@ -239,7 +242,9 @@ int virtio_gpu_virgl_get_num_capsets(VirtIOGPU *g);
 
 /* virtio-mem.c */
 struct virtio_gpu_memory_region*
-virtio_gpu_memory_region_new(VirtIOGPU *g, uint32_t memory_id);
+virtio_gpu_memory_region_new(VirtIOGPU *g, uint32_t memory_id,
+                             enum virtio_gpu_memory_type memory_type,
+                             bool guest_ref);
 struct virtio_gpu_memory_region*
 virtio_gpu_memory_region_find(VirtIOGPU *g, uint32_t memory_id);
 struct virtio_gpu_memory_region*
@@ -252,5 +257,11 @@ void virtio_gpu_memory_region_save(QEMUFile *f, VirtIOGPU *g,
 int virtio_gpu_memory_region_load(QEMUFile *f, VirtIOGPU *g,
                                   struct virtio_gpu_memory_region *mem,
                                   unsigned int iov_cnt);
+bool virtio_gpu_check_memory_type(VirtIOGPU *g,
+                                  enum virtio_gpu_memory_type memory_type);
+void virtio_gpu_cmd_memory_create(VirtIOGPU *g,
+                                  struct virtio_gpu_ctrl_command *cmd);
+void virtio_gpu_cmd_memory_unref(VirtIOGPU *g,
+                                 struct virtio_gpu_ctrl_command *cmd);
 
 #endif

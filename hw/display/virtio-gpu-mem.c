@@ -17,6 +17,9 @@
 #include "sysemu/dma.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/virtio-gpu.h"
+#include "hw/virtio/virtio-gpu-bswap.h"
+
+#include "trace.h"
 
 int virtio_gpu_create_iov(VirtIOGPU *g,
                           struct virtio_gpu_mem_entry *ents,
@@ -77,12 +80,16 @@ void virtio_gpu_cleanup_iov(VirtIOGPU *g,
 }
 
 struct virtio_gpu_memory_region*
-virtio_gpu_memory_region_new(VirtIOGPU *g, uint32_t memory_id)
+virtio_gpu_memory_region_new(VirtIOGPU *g, uint32_t memory_id,
+                             enum virtio_gpu_memory_type memory_type,
+                             bool guest_ref)
 {
     struct virtio_gpu_memory_region *mem;
 
     mem = g_new0(struct virtio_gpu_memory_region, 1);
     mem->memory_id = memory_id;
+    mem->memory_type = memory_type;
+    mem->guest_ref = guest_ref;
     atomic_inc(&mem->ref);
     QTAILQ_INSERT_HEAD(&g->memlist, mem, next);
     return mem;
@@ -121,6 +128,9 @@ virtio_gpu_memory_region_find(VirtIOGPU *g, uint32_t memory_id)
     struct virtio_gpu_memory_region *mem;
 
     QTAILQ_FOREACH(mem, &g->memlist, next) {
+        if (!mem->guest_ref) {
+            continue;
+        }
         if (mem->memory_id == memory_id) {
             return mem;
         }
@@ -177,4 +187,118 @@ int virtio_gpu_memory_region_load(QEMUFile *f, VirtIOGPU *g,
         }
     }
     return 0;
+}
+
+bool virtio_gpu_check_memory_type(VirtIOGPU *g,
+                                  enum virtio_gpu_memory_type memory_type)
+{
+    switch (memory_type) {
+    case VIRTIO_GPU_MEMORY_TRANSFER:
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
+
+void virtio_gpu_cmd_memory_create(VirtIOGPU *g,
+                                  struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_cmd_memory_create create;
+    struct virtio_gpu_memory_region *mem;
+    struct virtio_gpu_mem_entry *ents;
+    size_t esize, s;
+    int ret;
+
+    VIRTIO_GPU_FILL_CMD(create);
+    virtio_gpu_bswap_32(&create, sizeof(create));
+    trace_virtio_gpu_cmd_mem_create(create.memory_id);
+
+    if (create.memory_id == 0 || create.memory_id == -1) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region id is not allowed\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID;
+        return;
+    }
+
+    if (!virtio_gpu_check_memory_type(g, create.memory_type)) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory type %d check failed\n",
+                      __func__, create.memory_type);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    mem = virtio_gpu_memory_region_find(g, create.memory_id);
+    if (mem) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region already exists %d\n",
+                      __func__, create.memory_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID;
+        return;
+    }
+
+    if (create.nr_entries > 16384) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: nr_entries is too big (%d > 16384)\n",
+                      __func__, create.nr_entries);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    esize = sizeof(*ents) * create.nr_entries;
+    ents = g_malloc(esize);
+    s = iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num,
+                   sizeof(create), ents, esize);
+    if (s != esize) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: command data size incorrect %zu vs %zu\n",
+                      __func__, s, esize);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        g_free(ents);
+        return;
+    }
+
+    mem = virtio_gpu_memory_region_new(g, create.memory_id,
+                                       create.memory_type, true);
+    ret = virtio_gpu_create_iov(g, ents, create.nr_entries,
+                                &mem->addrs, &mem->iov, &mem->size);
+    g_free(ents);
+
+    if (ret < 0) {
+        virtio_gpu_memory_region_unref(g, mem);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
+
+    mem->iov_cnt = create.nr_entries;
+    return;
+}
+
+void virtio_gpu_cmd_memory_unref(VirtIOGPU *g,
+                                 struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_cmd_memory_unref unref;
+    struct virtio_gpu_memory_region *mem;
+
+    VIRTIO_GPU_FILL_CMD(unref);
+    virtio_gpu_bswap_32(&unref, sizeof(unref));
+    trace_virtio_gpu_cmd_mem_unref(unref.memory_id);
+
+    if (unref.memory_id == 0 || unref.memory_id == -1) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region id is not allowed\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID;
+        return;
+    }
+
+    mem = virtio_gpu_memory_region_find(g, unref.memory_id);
+    if (!mem) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region not found %d\n",
+                      __func__, unref.memory_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID;
+        return;
+    }
+
+    mem->guest_ref = false;
+    virtio_gpu_memory_region_unref(g, mem);
+    return;
 }

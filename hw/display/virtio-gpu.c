@@ -284,6 +284,7 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     res->height = c2d.height;
     res->format = c2d.format;
     res->resource_id = c2d.resource_id;
+    res->memory_type = VIRTIO_GPU_MEMORY_TRANSFER;
 
     pformat = virtio_gpu_get_pixman_format(c2d.format);
     if (!pformat) {
@@ -677,7 +678,14 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
         return;
     }
 
-    res->mem = virtio_gpu_memory_region_new(g, -1);
+    if (res->memory_type != VIRTIO_GPU_MEMORY_TRANSFER) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: not transfer memory\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
+
+    res->mem = virtio_gpu_memory_region_new(g, -1, res->memory_type, false);
     ret = virtio_gpu_create_res_iov(g, &ab, cmd, &res->mem->addrs,
                                     &res->mem->iov, &res->mem->size);
     if (ret != 0) {
@@ -742,6 +750,12 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         break;
     case VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING:
         virtio_gpu_resource_detach_backing(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_MEMORY_CREATE:
+        virtio_gpu_cmd_memory_create(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_MEMORY_UNREF:
+        virtio_gpu_cmd_memory_unref(g, cmd);
         break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: unknown command 0x%x\n",
@@ -991,7 +1005,10 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
         res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
 
         if (iov_cnt) {
-            res->mem = virtio_gpu_memory_region_new(g, -1);
+            /* FIXME: store memory-type and guest_ref */
+            res->mem = virtio_gpu_memory_region_new(g, -1,
+                                                    VIRTIO_GPU_MEMORY_TRANSFER,
+                                                    false);
             ret = virtio_gpu_memory_region_load(f, g, res->mem, iov_cnt);
             if (ret < 0) {
                 virtio_gpu_memory_region_unref(g, res->mem);
@@ -1075,6 +1092,7 @@ static void virtio_gpu_reset(VirtIODevice *vdev)
 {
     VirtIOGPU *g = VIRTIO_GPU(vdev);
     struct virtio_gpu_simple_resource *res, *tmp;
+    struct virtio_gpu_memory_region *mem, *mtmp;
     struct virtio_gpu_ctrl_command *cmd;
 
 #ifdef CONFIG_VIRGL
@@ -1086,6 +1104,13 @@ static void virtio_gpu_reset(VirtIODevice *vdev)
     QTAILQ_FOREACH_SAFE(res, &g->reslist, next, tmp) {
         virtio_gpu_resource_destroy(g, res);
     }
+
+    QTAILQ_FOREACH_SAFE(mem, &g->memlist, next, mtmp) {
+        if (mem->guest_ref) {
+            virtio_gpu_memory_region_unref(g, mem);
+        }
+    }
+    assert(QTAILQ_EMPTY(&g->memlist));
 
     while (!QTAILQ_EMPTY(&g->cmdq)) {
         cmd = QTAILQ_FIRST(&g->cmdq);

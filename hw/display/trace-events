@@ -55,6 +55,8 @@ virtio_gpu_cmd_ctx_submit(uint32_t ctx, uint32_t size) "ctx 0x%x, size %d"
 virtio_gpu_update_cursor(uint32_t scanout, uint32_t x, uint32_t y, const char *type, uint32_t res) "scanout %d, x %d, y %d, %s, res 0x%x"
 virtio_gpu_fence_ctrl(uint64_t fence, uint32_t type) "fence 0x%" PRIx64 ", type 0x%x"
 virtio_gpu_fence_resp(uint64_t fence) "fence 0x%" PRIx64
+virtio_gpu_cmd_mem_create(uint32_t mem) "mem 0x%x"
+virtio_gpu_cmd_mem_unref(uint32_t mem) "mem 0x%x"
 
 # qxl.c
 disable qxl_interface_set_mm_time(int qid, uint32_t mm_time) "%d %d"
