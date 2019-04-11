@@ -58,4 +58,14 @@ virtio_gpu_t2d_bswap(struct virtio_gpu_transfer_to_host_2d *t2d)
     le32_to_cpus(&t2d->padding);
 }
 
+static inline void
+virtio_gpu_cram_bswap(struct virtio_gpu_cmd_resource_attach_memory *am)
+{
+    virtio_gpu_ctrl_hdr_bswap(&am->hdr);
+    le32_to_cpus(&am->resource_id);
+    le32_to_cpus(&am->memory_id);
+    le32_to_cpus(&am->plane);
+    le64_to_cpus(&am->offset);
+}
+
 #endif

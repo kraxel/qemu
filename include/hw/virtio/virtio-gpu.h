@@ -61,6 +61,7 @@ struct virtio_gpu_simple_resource {
     pixman_image_t *image;
     uint64_t hostmem;
     struct virtio_gpu_memory_region *mem;
+    uint64_t mem_offset;
     QTAILQ_ENTRY(virtio_gpu_simple_resource) next;
 };
 

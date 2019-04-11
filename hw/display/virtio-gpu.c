@@ -697,6 +697,71 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
 }
 
 static void
+virtio_gpu_resource_attach_memory(VirtIOGPU *g,
+                                   struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_cmd_resource_attach_memory am;
+    struct virtio_gpu_simple_resource *res;
+    struct virtio_gpu_memory_region *mem;
+    uint64_t size;
+
+    VIRTIO_GPU_FILL_CMD(am);
+    virtio_gpu_cram_bswap(&am);
+    trace_virtio_gpu_cmd_res_mem_attach(am.resource_id, am.memory_id,
+                                        am.plane, am.offset);
+
+    if (am.plane != 0) {
+        /* planar formats not implemented */
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: non-zero plane %d\n",
+                      __func__, am.plane);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    res = virtio_gpu_find_resource(g, am.resource_id);
+    if (!res) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: illegal resource specified %d\n",
+                      __func__, am.resource_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return;
+    }
+
+    if (res->mem) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already has backing\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
+
+    mem = virtio_gpu_memory_region_find(g, am.memory_id);
+    if (!mem) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region not found %d\n",
+                      __func__, am.memory_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_MEMORY_ID;
+        return;
+    }
+
+    if (res->memory_type != mem->memory_type) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory type mismatch\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
+        return;
+    }
+
+    size = calc_image_hostmem(res->format, res->width, res->height);
+    if (am.offset + size > mem->size) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region too small\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    res->mem = virtio_gpu_memory_region_ref(g, mem);
+    res->mem_offset = am.offset;
+    return;
+}
+
+static void
 virtio_gpu_resource_detach_backing(VirtIOGPU *g,
                                    struct virtio_gpu_ctrl_command *cmd)
 {
@@ -756,6 +821,9 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         break;
     case VIRTIO_GPU_CMD_MEMORY_UNREF:
         virtio_gpu_cmd_memory_unref(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_RESOURCE_ATTACH_MEMORY:
+        virtio_gpu_resource_attach_memory(g, cmd);
         break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: unknown command 0x%x\n",
