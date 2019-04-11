@@ -644,7 +644,6 @@ static void virtio_gpu_cleanup_mapping(VirtIOGPU *g,
                                        struct virtio_gpu_simple_resource *res)
 {
     if (res->mem) {
-        virtio_gpu_cleanup_iov(g, res->mem->iov, res->mem->iov_cnt);
         virtio_gpu_memory_region_unref(g, res->mem);
         res->mem = NULL;
     }

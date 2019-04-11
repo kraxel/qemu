@@ -102,6 +102,7 @@ void virtio_gpu_memory_region_unref(VirtIOGPU *g,
         return;
     }
 
+    virtio_gpu_cleanup_iov(g, mem->iov, mem->iov_cnt);
     g_free(mem->addrs);
     QTAILQ_REMOVE(&g->memlist, mem, next);
     g_free(mem);
