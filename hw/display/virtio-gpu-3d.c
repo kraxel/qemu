@@ -292,7 +292,7 @@ static void virgl_resource_attach_backing(VirtIOGPU *g,
     VIRTIO_GPU_FILL_CMD(att_rb);
     trace_virtio_gpu_cmd_res_back_attach(att_rb.resource_id);
 
-    ret = virtio_gpu_create_res_iov(g, &att_rb, cmd, NULL, &res_iovs);
+    ret = virtio_gpu_create_res_iov(g, &att_rb, cmd, NULL, &res_iovs, NULL);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;

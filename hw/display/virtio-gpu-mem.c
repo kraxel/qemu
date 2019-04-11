@@ -21,13 +21,17 @@
 int virtio_gpu_create_iov(VirtIOGPU *g,
                           struct virtio_gpu_mem_entry *ents,
                           int nr_entries,
-                          uint64_t **addr, struct iovec **iov)
+                          uint64_t **addr, struct iovec **iov,
+                          uint64_t *size)
 {
     int i;
 
     *iov = g_malloc0(sizeof(struct iovec) * nr_entries);
     if (addr) {
         *addr = g_malloc0(sizeof(uint64_t) * nr_entries);
+    }
+    if (size) {
+        *size = 0;
     }
     for (i = 0; i < nr_entries; i++) {
         uint64_t a = le64_to_cpu(ents[i].addr);
@@ -38,6 +42,9 @@ int virtio_gpu_create_iov(VirtIOGPU *g,
                                             a, &len, DMA_DIRECTION_TO_DEVICE);
         if (addr) {
             (*addr)[i] = a;
+        }
+        if (size) {
+            *size += len;
         }
         if (!(*iov)[i].iov_base || len != l) {
             qemu_log_mask(LOG_GUEST_ERROR, "%s: dma_memory_map failed\n",

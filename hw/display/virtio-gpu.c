@@ -610,7 +610,8 @@ static void virtio_gpu_set_scanout(VirtIOGPU *g,
 int virtio_gpu_create_res_iov(VirtIOGPU *g,
                               struct virtio_gpu_resource_attach_backing *ab,
                               struct virtio_gpu_ctrl_command *cmd,
-                              uint64_t **addr, struct iovec **iov)
+                              uint64_t **addr, struct iovec **iov,
+                              uint64_t *size)
 {
     struct virtio_gpu_mem_entry *ents;
     size_t esize, s;
@@ -635,7 +636,7 @@ int virtio_gpu_create_res_iov(VirtIOGPU *g,
         return -1;
     }
 
-    ret = virtio_gpu_create_iov(g, ents, ab->nr_entries, addr, iov);
+    ret = virtio_gpu_create_iov(g, ents, ab->nr_entries, addr, iov, size);
     g_free(ents);
     return ret;
 }
@@ -678,7 +679,7 @@ virtio_gpu_resource_attach_backing(VirtIOGPU *g,
 
     res->mem = virtio_gpu_memory_region_new(g, -1);
     ret = virtio_gpu_create_res_iov(g, &ab, cmd, &res->mem->addrs,
-                                    &res->mem->iov);
+                                    &res->mem->iov, &res->mem->size);
     if (ret != 0) {
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         return;
