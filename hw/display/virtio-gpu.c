@@ -326,6 +326,52 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     }
 }
 
+static void virtio_gpu_resource_create_v2(VirtIOGPU *g,
+                                          struct virtio_gpu_ctrl_command *cmd)
+{
+    struct virtio_gpu_simple_resource *res;
+    struct virtio_gpu_cmd_resource_create_v2 cv2;
+
+    VIRTIO_GPU_FILL_CMD(cv2);
+    virtio_gpu_bswap_32(&cv2, sizeof(cv2));
+    trace_virtio_gpu_cmd_res_create_v2(cv2.resource_id);
+
+    if (cv2.resource_id == 0) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource id 0 is not allowed\n",
+                      __func__);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return;
+    }
+
+    res = virtio_gpu_find_resource(g, cv2.resource_id);
+    if (res) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: resource already exists %d\n",
+                      __func__, cv2.resource_id);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
+        return;
+    }
+
+    if (!virtio_gpu_check_memory_type(g, cv2.memory_type)) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: memory type %d check failed\n",
+                      __func__, cv2.memory_type);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    res = g_new0(struct virtio_gpu_simple_resource, 1);
+
+    res->width = cv2.width;
+    res->height = cv2.height;
+    res->format = cv2.format;
+    res->resource_id = cv2.resource_id;
+    res->memory_type = cv2.memory_type;
+
+    virtio_gpu_resource_init(g, cmd, res);
+    if (cmd->error) {
+        g_free(res);
+    }
+}
+
 static void virtio_gpu_disable_scanout(VirtIOGPU *g, int scanout_id)
 {
     struct virtio_gpu_scanout *scanout = &g->parent_obj.scanout[scanout_id];
@@ -840,6 +886,9 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         break;
     case VIRTIO_GPU_CMD_RESOURCE_ATTACH_MEMORY:
         virtio_gpu_resource_attach_memory(g, cmd);
+        break;
+    case VIRTIO_GPU_CMD_RESOURCE_CREATE_V2:
+        virtio_gpu_resource_create_v2(g, cmd);
         break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "%s: unknown command 0x%x\n",

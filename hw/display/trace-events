@@ -58,6 +58,7 @@ virtio_gpu_fence_resp(uint64_t fence) "fence 0x%" PRIx64
 virtio_gpu_cmd_mem_create(uint32_t mem) "mem 0x%x"
 virtio_gpu_cmd_mem_unref(uint32_t mem) "mem 0x%x"
 virtio_gpu_cmd_res_mem_attach(uint32_t res, uint32_t mem, uint32_t plane, uint64_t off) "res 0x%x, mem 0x%x, plane %d, offset 0x%" PRIx64
+virtio_gpu_cmd_res_create_v2(uint32_t res) "res 0x%x"
 
 # qxl.c
 disable qxl_interface_set_mm_time(int qid, uint32_t mm_time) "%d %d"
