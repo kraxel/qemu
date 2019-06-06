@@ -781,6 +781,8 @@ static void virtio_gpu_simple_process_cmd(VirtIOGPU *g,
         virtio_gpu_resource_detach_backing(g, cmd);
         break;
     default:
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: unknown command 0x%x\n",
+                      __func__, cmd->cmd_hdr.type);
         cmd->error = VIRTIO_GPU_RESP_ERR_UNSPEC;
         break;
     }
