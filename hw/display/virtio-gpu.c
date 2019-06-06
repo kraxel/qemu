@@ -251,10 +251,44 @@ static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
     return height * stride;
 }
 
+static void virtio_gpu_resource_init(VirtIOGPU *g,
+                                     struct virtio_gpu_ctrl_command *cmd,
+                                     struct virtio_gpu_simple_resource *res)
+{
+    pixman_format_code_t pformat;
+
+    pformat = virtio_gpu_get_pixman_format(res->format);
+    if (!pformat) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: host couldn't handle guest format %d\n",
+                      __func__, res->format);
+        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
+        return;
+    }
+
+    res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
+    if (res->hostmem + g->hostmem < g->conf_max_hostmem) {
+        res->image = pixman_image_create_bits(pformat,
+                                              res->width,
+                                              res->height,
+                                              NULL, 0);
+    }
+
+    if (!res->image) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: resource creation failed %d %d %d\n",
+                      __func__, res->resource_id, res->width, res->height);
+        cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
+        return;
+    }
+
+    QTAILQ_INSERT_HEAD(&g->reslist, res, next);
+    g->hostmem += res->hostmem;
+}
+
 static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
                                           struct virtio_gpu_ctrl_command *cmd)
 {
-    pixman_format_code_t pformat;
     struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_resource_create_2d c2d;
 
@@ -286,35 +320,10 @@ static void virtio_gpu_resource_create_2d(VirtIOGPU *g,
     res->resource_id = c2d.resource_id;
     res->memory_type = VIRTIO_GPU_MEMORY_TRANSFER;
 
-    pformat = virtio_gpu_get_pixman_format(c2d.format);
-    if (!pformat) {
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: host couldn't handle guest format %d\n",
-                      __func__, c2d.format);
+    virtio_gpu_resource_init(g, cmd, res);
+    if (cmd->error) {
         g_free(res);
-        cmd->error = VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER;
-        return;
     }
-
-    res->hostmem = calc_image_hostmem(pformat, c2d.width, c2d.height);
-    if (res->hostmem + g->hostmem < g->conf_max_hostmem) {
-        res->image = pixman_image_create_bits(pformat,
-                                              c2d.width,
-                                              c2d.height,
-                                              NULL, 0);
-    }
-
-    if (!res->image) {
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "%s: resource creation failed %d %d %d\n",
-                      __func__, c2d.resource_id, c2d.width, c2d.height);
-        g_free(res);
-        cmd->error = VIRTIO_GPU_RESP_ERR_OUT_OF_MEMORY;
-        return;
-    }
-
-    QTAILQ_INSERT_HEAD(&g->reslist, res, next);
-    g->hostmem += res->hostmem;
 }
 
 static void virtio_gpu_disable_scanout(VirtIOGPU *g, int scanout_id)
