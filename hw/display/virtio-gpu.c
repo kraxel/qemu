@@ -338,6 +338,7 @@ static void virtio_gpu_resource_create_v2(VirtIOGPU *g,
 {
     struct virtio_gpu_simple_resource *res;
     struct virtio_gpu_cmd_resource_create_v2 cv2;
+    struct virtio_gpu_resp_resource_info info;
 
     VIRTIO_GPU_FILL_CMD(cv2);
     virtio_gpu_bswap_32(&cv2, sizeof(cv2));
@@ -377,6 +378,11 @@ static void virtio_gpu_resource_create_v2(VirtIOGPU *g,
     if (cmd->error) {
         g_free(res);
     }
+
+    info.align[0] = 0;
+    info.stride[0] = calc_image_stride(res);
+    info.size[0] = calc_image_hostmem(res);
+    virtio_gpu_ctrl_response(g, cmd, &info.hdr, sizeof(info));
 }
 
 static void virtio_gpu_disable_scanout(VirtIOGPU *g, int scanout_id)
