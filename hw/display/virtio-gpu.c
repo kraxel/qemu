@@ -239,16 +239,23 @@ void virtio_gpu_get_edid(VirtIOGPU *g,
     virtio_gpu_ctrl_response(g, cmd, &edid.hdr, sizeof(edid));
 }
 
-static uint32_t calc_image_hostmem(pixman_format_code_t pformat,
-                                   uint32_t width, uint32_t height)
+static uint32_t calc_image_stride(struct virtio_gpu_simple_resource *res)
 {
     /* Copied from pixman/pixman-bits-image.c, skip integer overflow check.
      * pixman_image_create_bits will fail in case it overflow.
      */
+    pixman_format_code_t pformat;
+    int bpp, stride;
 
-    int bpp = PIXMAN_FORMAT_BPP(pformat);
-    int stride = ((width * bpp + 0x1f) >> 5) * sizeof(uint32_t);
-    return height * stride;
+    pformat = virtio_gpu_get_pixman_format(res->format);
+    bpp = PIXMAN_FORMAT_BPP(pformat);
+    stride = ((res->width * bpp + 0x1f) >> 5) * sizeof(uint32_t);
+    return stride;
+}
+
+static uint32_t calc_image_hostmem(struct virtio_gpu_simple_resource *res)
+{
+    return calc_image_stride(res) * res->height;
 }
 
 static void virtio_gpu_resource_init(VirtIOGPU *g,
@@ -266,7 +273,7 @@ static void virtio_gpu_resource_init(VirtIOGPU *g,
         return;
     }
 
-    res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
+    res->hostmem = calc_image_hostmem(res);
     if (res->hostmem + g->hostmem < g->conf_max_hostmem) {
         res->image = pixman_image_create_bits(pformat,
                                               res->width,
@@ -810,7 +817,7 @@ virtio_gpu_resource_attach_memory(VirtIOGPU *g,
         return;
     }
 
-    size = calc_image_hostmem(res->format, res->width, res->height);
+    size = calc_image_hostmem(res);
     if (am.offset + size > mem->size) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: memory region too small\n",
                       __func__);
@@ -1135,7 +1142,7 @@ static int virtio_gpu_load(QEMUFile *f, void *opaque, size_t size,
             return -EINVAL;
         }
 
-        res->hostmem = calc_image_hostmem(pformat, res->width, res->height);
+        res->hostmem = calc_image_hostmem(res);
 
         if (iov_cnt) {
             /* FIXME: store memory-type and guest_ref */
