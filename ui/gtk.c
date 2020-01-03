@@ -1637,6 +1637,19 @@ static gboolean gd_frame_tick(GtkWidget *widget,
                               gpointer opaque)
 {
     VirtualConsole *vc = opaque;
+    static unsigned int sec;
+    static unsigned int cnt;
+    unsigned int now;
+
+    now = time(NULL);
+    if (sec != now) {
+        fprintf(stderr, "%4u fps\r", cnt);
+        fflush(stderr);
+        sec = now;
+        cnt = 1;
+    } else {
+        cnt++;
+    }
 
     vc->gfx.dcl.ops->dpy_refresh(&vc->gfx.dcl);
     return G_SOURCE_CONTINUE;
