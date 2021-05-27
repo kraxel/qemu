@@ -10,7 +10,7 @@
 
 #ifdef CONFIG_LINUX
 
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 
 int udmabuf_fd(void)
