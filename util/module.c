@@ -382,6 +382,9 @@ void module_load_qom_one(const char *type)
         if (!modlist->value->has_objs) {
             continue;
         }
+        if (!module_check_arch(modlist->value)) {
+            continue;
+        }
         for (sl = modlist->value->objs; sl != NULL; sl = sl->next) {
             if (strcmp(type, sl->value) == 0) {
                 module_load_one("", modlist->value->name, false);
@@ -403,6 +406,9 @@ void module_load_qom_all(void)
 
     for (modlist = modinfo->list; modlist != NULL; modlist = modlist->next) {
         if (!modlist->value->has_objs) {
+            continue;
+        }
+        if (!module_check_arch(modlist->value)) {
             continue;
         }
         module_load_one("", modlist->value->name, false);
