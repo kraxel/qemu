@@ -103,3 +103,5 @@ uffd_unregister_memory_failed(void *addr, uint64_t length, int err) "addr: %p le
 
 # module.c
 module_load_modinfo(const char *filename) "modinfo %s"
+module_load_module(const char *name) "name %s"
+module_lookup_object_type(const char *name) "file %s"

@@ -254,6 +254,7 @@ static int module_load_file(const char *fname, bool mayfail, bool export_symbols
         ret = 0;
     }
 
+    trace_module_load_module(fname);
     QTAILQ_FOREACH_SAFE(e, &dso_init_list, node, next) {
         QTAILQ_REMOVE(&dso_init_list, e, node);
         g_free(e);
@@ -364,6 +365,7 @@ void module_load_qom_one(const char *type)
     module_load_path_init();
     module_load_modinfo();
 
+    trace_module_lookup_object_type(type);
     for (modlist = modinfo->list; modlist != NULL; modlist = modlist->next) {
         if (!modlist->value->has_objs) {
             continue;
