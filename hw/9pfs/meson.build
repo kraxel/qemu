@@ -1,3 +1,5 @@
+hw_9pfs_modules = {}
+
 fs_ss = ss.source_set()
 fs_ss.add(files(
   '9p-local.c',
@@ -17,4 +19,11 @@ fs_ss.add(files(
 fs_ss.add(when: 'CONFIG_XEN', if_true: files('xen-9p-backend.c'))
 softmmu_ss.add_all(when: 'CONFIG_FSDEV_9P', if_true: fs_ss)
 
-specific_ss.add(when: 'CONFIG_VIRTIO_9P', if_true: files('virtio-9p-device.c'))
+if config_all_devices.has_key('CONFIG_VIRTIO_9P')
+  virtio_9p_ss = ss.source_set()
+  virtio_9p_ss.add(when: 'CONFIG_VIRTIO_9P',
+                   if_true: files('virtio-9p-device.c'))
+  hw_9pfs_modules += {'virtio-9p-device': virtio_9p_ss}
+endif
+
+target_modules += { 'hw-9pfs': hw_9pfs_modules }
