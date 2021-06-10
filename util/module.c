@@ -129,6 +129,21 @@ void module_allow_arch(const char *arch)
     module_arch = arch;
 }
 
+static bool module_check_arch(ModuleInfo *info)
+{
+    if (info->has_arch) {
+        if (!module_arch) {
+            /* no arch set -> ignore all */
+            return false;
+        }
+        if (strcmp(module_arch, info->arch) != 0) {
+            /* mismatch */
+            return false;
+        }
+    }
+    return true;
+}
+
 static void module_load_path_init(void)
 {
     const char *search_dir;
@@ -302,12 +317,9 @@ bool module_load_one(const char *prefix, const char *lib_name, bool mayfail)
     module_load_modinfo();
 
     for (modlist = modinfo->list; modlist != NULL; modlist = modlist->next) {
-        if (modlist->value->has_arch) {
-            if (strcmp(modlist->value->name, module_name) == 0) {
-                if (!module_arch ||
-                    strcmp(modlist->value->arch, module_arch) != 0) {
-                    return false;
-                }
+        if (strcmp(modlist->value->name, module_name) == 0) {
+            if (!module_check_arch(modlist->value)) {
+                return false;
             }
         }
         if (modlist->value->has_deps) {
