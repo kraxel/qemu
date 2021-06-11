@@ -2065,13 +2065,15 @@ foreach d, list : target_modules
                     '-DCONFIG_TARGET="@0@-config-target.h"'.format(target),
                     '-DCONFIG_DEVICES="@0@-config-devices.h"'.format(target)]
           target_module_ss = module_ss.apply(config_target, strict: false)
-          sl = static_library(d + '-' + m + '-' + config_target['TARGET_NAME'],
-                              [genh, target_module_ss.sources()],
-                              dependencies: [modulecommon, target_module_ss.dependencies()],
-                              include_directories: target_inc,
-                              c_args: c_args,
-                              pic: true)
-          softmmu_mods += sl
+          if target_module_ss.sources() != []
+            sl = static_library(d + '-' + m + '-' + config_target['TARGET_NAME'],
+                                [genh, target_module_ss.sources()],
+                                dependencies: [modulecommon, target_module_ss.dependencies()],
+                                include_directories: target_inc,
+                                c_args: c_args,
+                                pic: true)
+            softmmu_mods += sl
+          endif
         endif
       endforeach
     else
