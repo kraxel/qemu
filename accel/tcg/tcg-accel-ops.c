@@ -124,9 +124,11 @@ static const TypeInfo tcg_accel_ops_type = {
     .class_init = tcg_accel_ops_class_init,
     .abstract = true,
 };
+module_obj("tcg-accel-ops"); // FIXME: use ACCEL_OPS_NAME
 
 static void tcg_accel_ops_register_types(void)
 {
     type_register_static(&tcg_accel_ops_type);
 }
 type_init(tcg_accel_ops_register_types);
+module_arch(TARGET_NAME);
