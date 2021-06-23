@@ -24,10 +24,10 @@ if test "$QEMU_GA_MSI_MINGW_DLL_PATH" = ""; then
 fi
 
 case "$QEMU_GA_MSI_MINGW_DLL_PATH" in
-    *-w32-*)
+    */i686-w64-mingw32/*)
 	DESTDIR="$SRC_PATH/dll/w32"
 	;;
-    *-w64-*)
+    */x86_64-w64-mingw32/*)
 	DESTDIR="$SRC_PATH/dll/w64"
 	;;
     *)
@@ -44,12 +44,14 @@ function check_windows_binary_deps() {
     for dll in $dlls; do
 	test -f "$QEMU_GA_MSI_MINGW_DLL_PATH/$dll" || continue
 	test -f "$DESTDIR/$dll" && continue
-	echo "copy $dll"
+	echo "# copy: $dll"
 	cp "$QEMU_GA_MSI_MINGW_DLL_PATH/$dll" "$DESTDIR/$dll"
 	check_windows_binary_deps "$DESTDIR/$dll"
     done
 }
 
+echo "# from: $QEMU_GA_MSI_MINGW_DLL_PATH"
+echo "#   to: $DESTDIR"
 mkdir -p "$DESTDIR"
 for file in *.exe; do
     check_windows_binary_deps $file
