@@ -7,7 +7,8 @@ uefi_vars_ss.add(when: 'CONFIG_UEFI_VARS',
                                 'var-service-guid.c',
                                 'var-service-utils.c',
                                 'var-service-policy.c',
-                                'var-service-siglist.c'))
+                                'var-service-siglist.c',
+                                'var-service-sysbus.c'))
 
 if (config_all_devices.has_key('CONFIG_UEFI_VARS'))
   uefi_vars_ss.add(when: gnutls,
