@@ -14,6 +14,11 @@ if (config_all_devices.has_key('CONFIG_UEFI_VARS'))
   uefi_vars_ss.add(files('var-service-siglist.c'))
 endif
 
+uefi_vars_isa_ss = ss.source_set()
+uefi_vars_isa_ss.add(when: 'CONFIG_UEFI_VARS_ISA',
+                     if_true: files('var-service-isa.c'))
+
 modules += { 'hw-uefi' : {
     'vars'     : uefi_vars_ss,
+    'vars-isa' : uefi_vars_isa_ss,
 }}
