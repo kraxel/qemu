@@ -65,6 +65,7 @@ if have_system
     'rdma',
     'rocker',
     'tpm',
+    'uefi',
   ]
 endif
 if have_system or have_tools
