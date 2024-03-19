@@ -324,6 +324,13 @@ static void pc_q35_init(MachineState *machine)
                                x86_nvdimm_acpi_dsmio,
                                x86ms->fw_cfg, OBJECT(pcms));
     }
+
+    if (pcms->svsm_virtio_mmio) {
+        for (int dev = 0; dev < 4; dev++) {
+            hwaddr addr = 0xfef00000 + dev * TARGET_PAGE_SIZE;
+            sysbus_create_simple("virtio-mmio", addr, /* no irq */ NULL);
+        }
+    }
 }
 
 #define DEFINE_Q35_MACHINE(major, minor) \
