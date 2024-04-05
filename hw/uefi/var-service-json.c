@@ -132,10 +132,6 @@ static void uefi_vars_from_qapi(uefi_vars_state *uv, UefiVarStore *vs)
 
         if (v->time && strlen(v->time) == 32) {
             parse_hexstr(&var->time, v->time, 32);
-            info_report("%s: %s: %04u-%02u-%02u %02u:%02u:%02u",
-                        __func__, v->name,
-                        var->time.year, var->time.month, var->time.day,
-                        var->time.hour, var->time.minute, var->time.second);
         }
 
         QTAILQ_INSERT_TAIL(&uv->variables, var, next);
