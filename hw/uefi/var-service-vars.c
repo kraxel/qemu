@@ -235,10 +235,13 @@ static void append_write(uefi_variable *old_var,
     void *data;
 
     uefi_vars_siglist_init(&siglist);
+    info_report("%s: parse old (size %d)", __func__, old_var->data_size);
     uefi_vars_siglist_parse(&siglist, old_var->data, old_var->data_size);
+    info_report("%s: parse update (size %d)", __func__, new_var->data_size);
     uefi_vars_siglist_parse(&siglist, new_var->data, new_var->data_size);
 
     size = uefi_vars_siglist_blob_size(&siglist);
+    info_report("%s: generate merge (size %lu)", __func__, size);
     data = g_malloc(size);
     uefi_vars_siglist_blob_generate(&siglist, data, size);
 
@@ -443,7 +446,16 @@ static size_t uefi_vars_mm_set_variable(uefi_vars_state *uv, mm_header *mhdr,
                 goto rollback;
             }
             if (old_var && new_var) {
+                info_report("%s: old: %04d-%02d-%02d", __func__,
+                            old_var->time.year,
+                            old_var->time.month,
+                            old_var->time.day);
+                info_report("%s: new: %04d-%02d-%02d", __func__,
+                            new_var->time.year,
+                            new_var->time.month,
+                            new_var->time.day);
                 if (uefi_time_compare(&old_var->time, &new_var->time) > 0) {
+                    info_report("%s: reject time", __func__);
                     mvar->status = EFI_SECURITY_VIOLATION;
                     goto rollback;
                 }
