@@ -440,6 +440,8 @@ static size_t uefi_vars_mm_set_variable(uefi_vars_state *uv, mm_header *mhdr,
         new_var = add_variable(uv, va->guid, name, va->name_size,
                                va->attributes);
         if (va->attributes & EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS) {
+            info_report("%s: EFI_VARIABLE_TIME_BASED_"
+                        "AUTHENTICATED_WRITE_ACCESS", __func__);
             status = uefi_vars_check_auth_2(uv, new_var, va, data);
             if (status != EFI_SUCCESS) {
                 mvar->status = status;
