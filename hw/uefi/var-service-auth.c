@@ -222,16 +222,14 @@ efi_status uefi_vars_check_auth_2(uefi_vars_state *uv, uefi_variable *var,
     uint64_t data_offset;
     efi_status status;
 
-    info_report("%s:", __func__);
-
     if (va->data_size < sizeof(*auth)) {
-        return EFI_BAD_BUFFER_SIZE;
+        return EFI_SECURITY_VIOLATION;
     }
     if (uadd64_overflow(sizeof(efi_time), auth->hdr_length, &data_offset)) {
-        return EFI_BAD_BUFFER_SIZE;
+        return EFI_SECURITY_VIOLATION;
     }
     if (va->data_size < data_offset) {
-        return EFI_BAD_BUFFER_SIZE;
+        return EFI_SECURITY_VIOLATION;
     }
 
     if (auth->hdr_revision != 0x0200 ||
@@ -246,7 +244,7 @@ efi_status uefi_vars_check_auth_2(uefi_vars_state *uv, uefi_variable *var,
             return status;
         }
     } else {
-        /* FIXME */
+        info_report("%s:%d: TODO", __func__, __LINE__);
         return EFI_UNSUPPORTED;
     }
 
