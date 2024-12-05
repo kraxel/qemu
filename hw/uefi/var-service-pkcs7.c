@@ -120,6 +120,10 @@ static gnutls_x509_trust_list_t build_trust_list(uefi_variable *var)
         return NULL;
     }
 
+    if (!var) {
+        return tlist;
+    }
+
     uefi_vars_siglist_init(&siglist);
     uefi_vars_siglist_parse(&siglist, var->data, var->data_size);
 
