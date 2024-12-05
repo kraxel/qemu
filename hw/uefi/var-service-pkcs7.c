@@ -211,6 +211,14 @@ efi_status uefi_vars_check_pkcs7_2(uefi_variable *siglist,
         goto out;
     }
 
+#if 1
+    /* authvar */
+    if (!siglist) {
+        int n = gnutls_pkcs7_get_crt_count(pkcs7);
+        info_report("pkcs7 certs: %d", n);
+    }
+#endif
+
     rc = gnutls_pkcs7_verify(pkcs7, tlist,
                              NULL, 0,
                              0, signed_data,

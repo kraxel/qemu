@@ -245,6 +245,7 @@ efi_status uefi_vars_check_auth_2(uefi_vars_state *uv, uefi_variable *var,
         }
     } else {
         info_report("%s:%d: TODO", __func__, __LINE__);
+        uefi_vars_check_pkcs7_2(NULL, va, data);
         return EFI_UNSUPPORTED;
     }
 
