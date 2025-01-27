@@ -6,6 +6,7 @@
 #include "qemu/osdep.h"
 #include "migration/vmstate.h"
 
+#include "hw/acpi/acpi_aml_interface.h"
 #include "hw/isa/isa.h"
 #include "hw/qdev-properties.h"
 
@@ -61,12 +62,32 @@ static void uefi_vars_isa_realize(DeviceState *dev, Error **errp)
     uefi_vars_realize(&uv->state, errp);
 }
 
+static void uefi_vars_isa_build_aml(AcpiDevAmlIf *adev, Aml *scope)
+{
+    Aml *dev;
+    Aml *crs;
+
+    crs = aml_resource_template();
+    aml_append(crs, aml_io(AML_DECODE16,
+                           UEFI_VARS_IO_BASE, UEFI_VARS_IO_BASE,
+                           0x00, UEFI_VARS_REGS_SIZE));
+
+    dev = aml_device("QEFI");
+    aml_append(dev, aml_name_decl("_HID", aml_string("UEFIVARS")));
+    aml_append(dev, aml_name_decl("_STA", aml_int(0xb)));
+    aml_append(dev, aml_name_decl("_CRS", crs));
+
+    aml_append(scope, dev);
+}
+
 static void uefi_vars_isa_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    AcpiDevAmlIfClass *adevc = ACPI_DEV_AML_IF_CLASS(klass);
 
     dc->realize = uefi_vars_isa_realize;
     dc->vmsd = &vmstate_uefi_vars_isa;
+    adevc->build_dev_aml = uefi_vars_isa_build_aml;
     device_class_set_legacy_reset(dc, uefi_vars_isa_reset);
     device_class_set_props(dc, uefi_vars_isa_properties);
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
@@ -78,6 +99,10 @@ static const TypeInfo uefi_vars_isa_info = {
     .instance_size = sizeof(uefi_vars_isa_state),
     .instance_init = uefi_vars_isa_init,
     .class_init    = uefi_vars_isa_class_init,
+    .interfaces = (InterfaceInfo[]) {
+        { TYPE_ACPI_DEV_AML_IF },
+        { },
+    },
 };
 module_obj(TYPE_UEFI_VARS_ISA);
 module_dep("hw-uefi-vars");
