@@ -59,6 +59,7 @@
 #include "hw/hyperv/vmbus-bridge.h"
 #include "hw/mem/nvdimm.h"
 #include "hw/i386/acpi-build.h"
+#include "hw/uefi/hardware-info.h"
 #include "target/i386/cpu.h"
 
 /* ICH9 AHCI has 6 ports */
@@ -327,8 +328,13 @@ static void pc_q35_init(MachineState *machine)
 
     if (pcms->svsm_virtio_mmio) {
         for (int dev = 0; dev < 4; dev++) {
-            hwaddr addr = 0xfef00000 + dev * TARGET_PAGE_SIZE;
-            sysbus_create_simple("virtio-mmio", addr, /* no irq */ NULL);
+            HARDWARE_INFO_SIMPLE_DEVICE hwinfo = {
+                .mmio_address = cpu_to_le64(0xfef00000 + dev * TARGET_PAGE_SIZE),
+            };
+            sysbus_create_simple("virtio-mmio", hwinfo.mmio_address,
+                                 /* no irq */ NULL);
+            hardware_info_register(HardwareInfoVirtioMmioSvsm,
+                                   &hwinfo, sizeof(hwinfo));
         }
     }
 }
