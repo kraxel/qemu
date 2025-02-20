@@ -20,7 +20,6 @@ void hardware_info_register(HARDWARE_INFO_TYPE type, void *info, uint64_t infosi
         .type.value = type,
         .size       = infosize,
     };
-    void *ptr;
 
     blob = g_realloc(blob, blobsize + sizeof(hdr) + infosize);
     memcpy(blob + blobsize, &hdr, sizeof(hdr));
@@ -28,6 +27,5 @@ void hardware_info_register(HARDWARE_INFO_TYPE type, void *info, uint64_t infosi
     memcpy(blob + blobsize, info, infosize);
     blobsize += infosize;
 
-    ptr = fw_cfg_modify_file(fw_cfg_find(), "etc/hardware-info", blob, blobsize);
-    g_free(ptr);
+    fw_cfg_modify_file(fw_cfg_find(), "etc/hardware-info", blob, blobsize);
 }
