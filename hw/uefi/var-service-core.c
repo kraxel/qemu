@@ -101,6 +101,10 @@ static uint32_t uefi_vars_cmd_mm(uefi_vars_state *uv, bool dma_mode)
     }
     memset(uv->buffer + size, 0, uv->buf_size - size);
 
+    if (uv->pcapfp) {
+        var_service_pcap_request(uv->pcapfp, uv->buffer, size);
+    }
+
     /* dispatch */
     if (qemu_uuid_is_equal(&mhdr->guid, &EfiSmmVariableProtocolGuid)) {
         retval = uefi_vars_mm_vars_proto(uv);
@@ -125,6 +129,10 @@ static uint32_t uefi_vars_cmd_mm(uefi_vars_state *uv, bool dma_mode)
 
     } else {
         retval = UEFI_VARS_STS_ERR_NOT_SUPPORTED;
+    }
+
+    if (uv->pcapfp) {
+        var_service_pcap_reply(uv->pcapfp, uv->buffer, sizeof(*mhdr) + mhdr->length);
     }
 
     /* write buffer */
@@ -163,6 +171,10 @@ void uefi_vars_hard_reset(uefi_vars_state *uv)
     uefi_vars_clear_volatile(uv);
     uefi_vars_policies_clear(uv);
     uefi_vars_auth_init(uv);
+
+    if (uv->pcapfp) {
+        var_service_pcap_reset(uv->pcapfp);
+    }
 }
 
 static uint32_t uefi_vars_cmd(uefi_vars_state *uv, uint32_t cmd)
@@ -319,4 +331,15 @@ void uefi_vars_realize(uefi_vars_state *uv, Error **errp)
 {
     uefi_vars_json_init(uv, errp);
     uefi_vars_json_load(uv, errp);
+
+    if (uv->pcapfile) {
+        int fd = qemu_open_old(uv->pcapfile,
+                               O_CREAT | O_WRONLY | O_TRUNC | O_BINARY, 0666);
+        if (fd < 0) {
+            warn_report("open %s: %s", uv->pcapfile, strerror(errno));
+            return;
+        }
+        uv->pcapfp = fdopen(fd, "wb");
+        var_service_pcap_init(uv->pcapfp);
+    }
 }
